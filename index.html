@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RNG Crafter V8</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #12121a; color: #eee; display: flex; justify-content: center; }
+        .container { width: 1100px; background: #1e1e2f; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.8); display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; }
+        .full-width { grid-column: 1 / -1; }
+        h1, h3, h4 { margin-top: 0; color: #fff; border-bottom: 1px solid #444; padding-bottom: 5px; }
+        button { padding: 8px 16px; font-size: 14px; cursor: pointer; border: none; border-radius: 4px; background-color: #3a7bd5; color: white; margin-bottom: 5px; transition: 0.2s;}
+        button:hover { background-color: #3a8df5; }
+        button:disabled { background-color: #555; color: #888; cursor: not-allowed; }
+        #rollBtn { background-color: #4CAF50; font-size: 18px; padding: 12px 24px; width: 100%; font-weight: bold;}
+        #rollBtn:hover { background-color: #45a049; }
+        #autoRollBtn { background-color: #673ab7; display: none; width: 100%; font-weight: bold; margin-top: 5px;}
+        .section { padding: 15px; background: #2a2a40; border: 1px solid #444; border-radius: 6px; }
+        .log { height: 220px; overflow-y: scroll; background: #0a0a0f; color: #fff; padding: 10px; font-family: monospace; font-size: 13px; border-radius: 4px; border: 1px solid #000;}
+        ul { list-style-type: none; padding: 0; margin: 0; }
+        li { padding: 4px 0; border-bottom: 1px solid #444; display: flex; justify-content: space-between; align-items: center; font-size: 14px;}
+        .gear-item { background: #3f3f5a; padding: 8px; margin-bottom: 5px; border-radius: 4px; border-left: 4px solid #3a7bd5; }
+        .equip-btn { background-color: #ff9800; font-size: 12px; padding: 4px 8px; }
+        .unequip-btn { background-color: #f44336; font-size: 12px; padding: 4px 8px; }
+        .use-btn { background-color: #e91e63; font-size: 12px; padding: 4px 8px; margin-left: 5px; }
+        
+        .highlight { color: #ffeb3b; font-weight: bold; }
+        .curse { color: #f44336; font-weight: bold; }
+        .overflow { color: #00e5ff; font-weight: bold; }
+        .sluck { color: #ff00ff; font-weight: bold; text-shadow: 0 0 5px #ff00ff; }
+        
+        .r-common { color: #ffffff; }
+        .r-uncommon { color: #4caf50; font-weight: bold; }
+        .r-rare { color: #2196f3; font-weight: bold; }
+        .r-epic { color: #9c27b0; font-weight: bold; }
+        .r-legendary { color: #ffeb3b; font-weight: bold; text-shadow: 0 0 3px #ff9800; }
+        .r-mythic { color: #f44336; font-weight: bold; text-shadow: 0 0 4px #d32f2f; }
+        .r-exalted { color: #00008b; font-weight: bold; text-shadow: 0 0 5px #4169e1; }
+        .r-glorious { color: #ff0000; font-weight: bold; text-shadow: 0 0 5px #ff0000, 0 0 10px #8b0000; }
+        .r-transcendent { color: #00ffff; font-weight: bold; text-shadow: 0 0 10px #00ffff, 0 0 20px #00ccff, 0 0 30px #0099ff; }
+        .r-collectable { color: #6a0dad; font-weight: bold; }
+
+        .sys-btn { background-color: #607d8b; font-size: 12px; }
+        .sys-btn.danger { background-color: #d32f2f; }
+        .buff-panel { background: #1a237e; padding: 10px; border-radius: 4px; margin-top: 10px; border-left: 4px solid #00bcd4; font-size: 13px;}
+        .chest-box { background: #4a148c; padding: 10px; border-radius: 4px; margin-bottom: 10px; border-left: 4px solid #e040fb;}
+        .tool-box { background: #3e2723; padding: 10px; border-radius: 4px; margin-bottom: 10px; border-left: 4px solid #ff9800;}
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="section full-width" style="text-align: center; position: relative;">
+        <h1>🎲 RNG Crafter V7.2: The Rune Update</h1>
+        <p>Total Rolls: <span id="rollCounter" class="highlight">0</span></p>
+        <div style="position: absolute; top: 15px; right: 15px; text-align: right;">
+            <button class="sys-btn" onclick="saveGame(true)">💾 Manual Save</button>
+            <button class="sys-btn danger" onclick="wipeSave()">⚠️ Hard Reset</button>
+            <div style="margin-top: 5px; font-size: 12px; text-align: right;">
+                <label style="display:block"><input id="skipExalted" type="checkbox" onchange="setSkipCutscene('exalted', this.checked)"> Skip 10m-99m cutscenes</label>
+                <label style="display:block"><input id="skipGlorious" type="checkbox" onchange="setSkipCutscene('glorious', this.checked)"> Skip 100m-999m cutscenes</label>
+                <label><input id="skipTranscendent" type="checkbox" onchange="setSkipCutscene('transcendent', this.checked)"> Skip 1b+ cutscenes</label>
+            </div>
+        </div>
+    </div>
+    
+    <div>
+        <div class="section">
+            <h3>Player Stats & Status</h3>
+            <p><strong>Total Luck:</strong> <span id="luckStat" class="highlight">0</span>% <span id="overflowStat" class="overflow"></span> <span id="sLuckStat" class="sluck"></span></p>
+            <p><strong>Roll Cooldown:</strong> <span id="cdrStat" class="highlight">3.0</span>s</p>
+            <hr>
+            <h4>Equipment</h4>
+            <p><strong>Left Gear:</strong> <span id="equipLeft">None</span></p>
+            <p><strong>Right Gear:</strong> <span id="equipRight">None</span></p>
+            
+            <div id="stackUI" style="display: none; margin-top: 10px;">
+                <span id="frostStacks">❄️ Frost: 0/250</span> | <span id="corruptionStacks">💀 Corruption: 0/1000</span> | <span id="runeStacks">🔮 Rune Energy: 0/100</span> | <span id="lifeStacks">💚 Life: 0/20000</span> | <span id="eternalGuidanceStacks">✨ Eternal Guidance: 0/100000</span> | <span id="theAbyssStacks">🌑 The Abyss: 0/5000</span> | <span id="abyssSlayerStacks">🗡️ Abyss Slayer: 0/12500</span> | <span id="trueAbyssSlayerStacks">🌌 True Abyss Slayer: 0/10</span>
+            </div>
+
+            <div class="buff-panel" id="buffPanel" style="display: none;">
+                <strong>Active Effects:</strong>
+                <div id="buffList"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Action</h3>
+            <button id="rollBtn" onclick="rollItem()">Roll Item</button>
+            <button id="autoRollBtn" onclick="toggleAutoRoll()">🔄 Enable Auto-Roll</button>
+            <p id="cooldownText" style="text-align: center; font-weight: bold; height: 20px;"></p>
+        </div>
+
+        <div class="section chest-box">
+            <h3>🧪 Consumables & Chests</h3>
+            <div id="chestUI"></div>
+            <div id="potionUI" style="margin-top: 10px; max-height: 150px; overflow-y: auto;"></div>
+        </div>
+
+        <div class="section">
+            <h3>Activity Log</h3>
+            <div class="log" id="activityLog"></div>
+        </div>
+    </div>
+
+    <div>
+        <div class="section" style="max-height: 250px; overflow-y: auto;">
+            <div style="margin-bottom: 8px;">
+                <button style="font-size:12px; margin-right:4px;" onclick="setInventoryTab('materials')">Materials</button>
+                <button style="font-size:12px; margin-right:4px;" onclick="setInventoryTab('special')">Special</button>
+                <button style="font-size:12px;" onclick="setInventoryTab('shop')">Potion Shop</button>
+            </div>
+            <h3 id="inventoryTitle">Materials Inventory</h3>
+            <ul id="inventoryList"></ul>
+        </div>
+
+        <div class="section" style="max-height: 250px; overflow-y: auto;">
+            <h3>Gear & Facilities</h3>
+            <div id="toolsUI" class="tool-box" style="display: none;">
+                <strong>⛏️ Tools</strong><br>
+                <button onclick="crackGeo()">Crack Geo (Cost: 1 Geo, 1 Pickaxe)</button>
+            </div>
+            <div id="smelterUI" class="tool-box" style="display: none; background: #664d00; border-left-color: #ffc107;">
+                <strong>🔥 Smelter Active</strong><br>
+                <button onclick="smeltGold()">Smelt Gold Bar (Cost: 1 Gold Ore)</button>
+            </div>
+            <ul id="gearInventory"></ul>
+        </div>
+
+        <div class="section" style="height: 350px; overflow-y: auto;">
+            <h3>Crafting Station</h3>
+            <div id="craftingList"></div>
+        </div>
+    </div>
+</div>
+
+<div id="cutscene" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; color: #fff; font-size: 24px; text-align: center; padding-top: 20%; font-family: serif; animation: fadeIn 1s;">
+    <div id="cutsceneText"></div>
+</div>
+
+<script>
+    // --- GAME STATE ---
+    let materials = {
+        wood: 0, stone: 0, iron: 0, coal: 0, copper: 0, silver: 0, goldOre: 0, goldBar: 0,
+        windEssence: 0, waterEssence: 0, snowyEssence: 0, celestial: 0,
+        gemstoneGeo: 0, topaz: 0, emerald: 0, ruby: 0, diamond: 0, amethyst: 0,
+        pickaxe: 0, luminousShard: 0,
+        essenceOfEternalFrost: 0, pieceOfCryosis: 0, essenceOfUnderworld: 0, 
+        fragmentOfHades: 0, luminousStone: 0, luminousOrb: 0,
+        corruptedFragment: 0, unknownOrb: 0, swordOfGreatMonarch: 0,
+        gilded: 0, abyssOrb: 0, essenceOfTheEarth: 0, 
+        charger: 0, essenceOfTheAbyss: 0, brokenRune: 0, fragmentOfTheAbyss: 0,
+        abyssCore: 0, magicCrystal: 0, pieceOfTheEverlastingFlame: 0,
+        shardOfLife: 0, essenceOfLife: 0, permafrost: 0,
+        swordOfTheAbyss: 0, featherOfTheArchangel: 0, bloodFromTheAncientGod: 0,
+        apexStone: 0, scytheFromTheBloodlust: 0, divineSword: 0,
+        potionChest: 0, rarePotionChest: 0, megaPotionChest: 0, elementPotionChest: 0,
+        luckyPotion: 0, speedyPotion: 0, fortunePotionI: 0, fortunePotionII: 0, fortunePotionIII: 0,
+        hasteyPotionI: 0, hasteyPotionII: 0, hasteyPotionIII: 0, sealedPotion: 0, heavenlyPotion: 0, godlikePotion: 0,
+        superFortunePotionI: 0, superFortunePotionII: 0, superSpeedPotionI: 0, superSpeedPotionII: 0, supremePotion: 0,
+        heatwave: 0,
+        commonRune: 0, uncommonRune: 0, rareRune: 0, epicRune: 0, legendaryRune: 0, mythicRune: 0,
+        runeOfLife: 0, fullyChargedRune: 0,
+        singularity: 0, midnightBringer: 0, starscourge: 0,
+        northernLight: 0, oblivion: 0, atlas: 0,
+        abyssSlayer: 0, galaxy: 0, staryPotion: 0,
+        pointPotion: 0, coin: 0, shop: 0, shopkeeperWatch: 0,
+        P: 0
+    };
+
+    let gearInventory = []; 
+    let equipped = { left: null, right: null };
+    let hasSmelter = false;
+    let hasAutoRoller = false;
+    let totalRolls = 0;
+
+    let baseCooldown = 3000;
+    let baseMinCooldown = 100;
+    let isOnCooldown = false;
+    let isAutoRolling = false;
+    let autoRollTimer = null;
+
+    let skipCutsceneExalted = false;
+    let skipCutsceneGlorious = false;
+    let skipCutsceneTranscendent = false;
+
+    let stats = {
+        frost: 0, permafrost: 0, corruption: 0, runeCounter: 0,
+        multipliers: [], additives: [], cdrAdditives: [], luckNegatives: [], cdrNegatives: [],
+        permanentLuck: 0, permanentCdr: 0, curse3Timer: 0,
+        sLuckReady: 0, sLuckBaseReady: 0, sLuckRemainingRolls: 0, activePotions: [], apexFreeRolls: 0, apexCdrRolls: 0,
+        forgottenActive: 0, lifeStacks: 0, eternalGuidance: 0, theAbyss: 0,
+        abyssLuckMultiplier: 1, abyssRollsLeft: 0, pointPotionActive: 0,
+        abyssSlayerStacks: 0, abyssSlayerAwakened: false, abyssSlayerExtraLuck: 0, abyssSlayerExtraCdr: 0, abyssSlayerMultiplier: 1,
+        trueAbyssSlayerStacks: 0, trueAbyssSlayerLuckMultiplier: 1,
+        potionDurationPercentBonus: 0, sealedPotionExtraRolls: 0, heavenlyPotionExtraRolls: 0, godlikePotionExtraRolls: 0,
+        allowSluckStacking: false, heavenlyAndSealedStacking: false, godlikeStacking: false
+    };
+
+    let specialItems = {
+        abandonedRock: 0,
+        memory: 0,
+        theForbiddenBook: 0,
+        crownOfTheAncient: 0,
+        starscourgeRadiant: 0
+    };
+
+    let inventoryTab = 'materials'; // or 'special'
+
+    // --- DATABASES ---
+    const baseLootTable = [
+        { id: 'wood', name: 'Wood', weight: 35000 }, { id: 'stone', name: 'Stone', weight: 35000 },
+        { id: 'iron', name: 'Iron', weight: 30000 }, { id: 'coal', name: 'Coal', weight: 30000 },
+        { id: 'copper', name: 'Copper', weight: 30000 }, { id: 'silver', name: 'Silver', weight: 20000 },
+        { id: 'goldOre', name: 'Gold Ore', weight: 15000 }, { id: 'topaz', name: 'Topaz', weight: 10000 },
+        { id: 'potionChest', name: 'Potion Chest', weight: 5000 }, { id: 'windEssence', name: 'Wind Essence', weight: 5000 },
+        { id: 'waterEssence', name: 'Water Essence', weight: 5000 }, { id: 'snowyEssence', name: 'Snowy Essence', weight: 5000 },
+        { id: 'gemstoneGeo', name: 'Gemstone Geo', weight: 1000 }, { id: 'emerald', name: 'Emerald', weight: 1000 },
+        { id: 'rarePotionChest', name: 'Rare Potion Chest', weight: 900 }, { id: 'ruby', name: 'Ruby', weight: 250 },
+        { id: 'luminousStone', name: 'Luminous Stone', weight: 250 },
+        { id: 'gilded', name: 'Gilded', weight: 150 }, { id: 'megaPotionChest', name: 'Mega Potion Chest', weight: 100 },
+        { id: 'amethyst', name: 'Amethyst', weight: 100 }, { id: 'abyssOrb', name: 'Abyss Orb', weight: 80 },
+        { id: 'diamond', name: 'Diamond', weight: 50 }, { id: 'essenceOfTheEarth', name: 'Essence of the Earth', weight: 50 },
+        { id: 'luminousOrb', name: 'Luminous Orb', weight: 40 },
+        { id: 'charger', name: 'Charger', weight: 20 }, { id: 'celestial', name: 'Celestial', weight: 15 },
+        { id: 'essenceOfTheAbyss', name: 'Essence of the Abyss', weight: 12 }, { id: 'essenceOfUnderworld', name: 'Essence of Underworld', weight: 10 },
+        { id: 'essenceOfEternalFrost', name: 'Essence of Eternal Frost', weight: 10 }, { id: 'brokenRune', name: 'Broken Rune', weight: 8 },
+        { id: 'fragmentOfTheAbyss', name: 'Fragment of the Abyss', weight: 4 },
+        { id: 'abyssCore', name: 'Abyss Core', weight: 1.5 }, { id: 'fragmentOfHades', name: 'Fragment of Hades', weight: 1 },
+        { id: 'corruptedFragment', name: 'Corrupted Fragment', weight: 0.8 }, { id: 'magicCrystal', name: 'Magic Crystal', weight: 0.8 },
+        { id: 'unknownOrb', name: 'Unknown Orb', weight: 0.5 }, { id: 'pieceOfTheEverlastingFlame', name: 'Piece of the Everlasting Flame', weight: 0.4 },
+        { id: 'shardOfLife', name: 'Shard of Life', weight: 0.15 }, { id: 'pieceOfCryosis', name: 'Piece of Cryosis', weight: 0.1 },
+        { id: 'essenceOfLife', name: 'Essence of Life', weight: 0.08 }, { id: 'permafrost', name: 'Permafrost', weight: 0.04 },
+        { id: 'swordOfTheAbyss', name: 'Sword of the Abyss', weight: 0.015 }, { id: 'swordOfGreatMonarch', name: 'Sword of the Great Monarch', weight: 0.01 },
+        { id: 'featherOfTheArchangel', name: 'Feather of the Archangel', weight: 0.008 }, { id: 'bloodFromTheAncientGod', name: 'Blood from the Ancient God', weight: 0.004 },
+        { id: 'apexStone', name: 'Apex Stone', weight: 0.0015 }, { id: 'scytheFromTheBloodlust', name: 'Scythe from the Bloodlust', weight: 0.0008 }, { id: 'divineSword', name: 'Divine Sword', weight: 0.0004 },
+        { id: 'singularity', name: 'Singularity', weight: 0.0006 }, { id: 'midnightBringer', name: 'Midnight Bringer', weight: 0.00045 }, { id: 'starscourge', name: 'Starscourge', weight: 0.0003 },
+        { id: 'northernLight', name: 'Northern Light', weight: 0.00015 }, { id: 'oblivion', name: 'Oblivion', weight: 0.0001 }, { id: 'atlas', name: 'Atlas', weight: 0.00005 }
+    ];
+
+    const baseTotalWeight = baseLootTable.reduce((sum, item) => sum + item.weight, 0);
+
+    const potionTables = {
+        potionChest: [{ id: 'luckyPotion', weight: 400 }, { id: 'speedyPotion', weight: 400 }, { id: 'fortunePotionI', weight: 250 }, { id: 'hasteyPotionI', weight: 250 }, { id: 'fortunePotionII', weight: 150 }, { id: 'hasteyPotionII', weight: 150 }, { id: 'fortunePotionIII', weight: 50 }, { id: 'hasteyPotionIII', weight: 50 }, { id: 'sealedPotion', weight: 10 }, { id: 'heavenlyPotion', weight: 1 }, { id: 'godlikePotion', weight: 0.1 }],
+        rarePotionChest: [{ id: 'luckyPotion', weight: 275 }, { id: 'speedyPotion', weight: 275 }, { id: 'fortunePotionI', weight: 275 }, { id: 'hasteyPotionI', weight: 275 }, { id: 'fortunePotionII', weight: 200 }, { id: 'hasteyPotionII', weight: 200 }, { id: 'fortunePotionIII', weight: 100 }, { id: 'hasteyPotionIII', weight: 100 }, { id: 'superFortunePotionI', weight: 50 }, { id: 'superFortunePotionII', weight: 30 }, { id: 'superSpeedPotionI', weight: 50 }, { id: 'superSpeedPotionII', weight: 30 }, { id: 'sealedPotion', weight: 70 }, { id: 'heavenlyPotion', weight: 25 }, { id: 'godlikePotion', weight: 2 }],
+        megaPotionChest: [{ id: 'fortunePotionII', weight: 200 }, { id: 'hasteyPotionII', weight: 200 }, { id: 'fortunePotionIII', weight: 100 }, { id: 'hasteyPotionIII', weight: 100 }, { id: 'superFortunePotionI', weight: 80 }, { id: 'superFortunePotionII', weight: 60 }, { id: 'superSpeedPotionI', weight: 80 }, { id: 'superSpeedPotionII', weight: 60 }, { id: 'sealedPotion', weight: 100 }, { id: 'heavenlyPotion', weight: 50 }, { id: 'godlikePotion', weight: 25 }, { id: 'forgottenPotion', weight: 15 }, { id: 'supremePotion', weight: 15 }]
+    };
+
+    const potionEffects = {
+        luckyPotion: { name: 'Lucky Potion', type: 'luck', val: 100, duration: 60000, desc: '+100% Luck (1m)' },
+        speedyPotion: { name: 'Speedy Potion', type: 'cdr', val: 150, duration: 60000, desc: '-0.15s CD (1m)' },
+        fortunePotionI: { name: 'Fortune Potion I', type: 'luck', val: 250, duration: 300000, desc: '+250% Luck (5m)' },
+        fortunePotionII: { name: 'Fortune Potion II', type: 'luck', val: 350, duration: 300000, desc: '+350% Luck (5m)' },
+        fortunePotionIII: { name: 'Fortune Potion III', type: 'luck', val: 500, duration: 300000, desc: '+500% Luck (5m)' },
+        hasteyPotionI: { name: 'Hastey Potion I', type: 'cdr', val: 350, duration: 300000, desc: '-0.35s CD (5m)' },
+        hasteyPotionII: { name: 'Hastey Potion II', type: 'cdr', val: 500, duration: 300000, desc: '-0.5s CD (5m)' },
+        hasteyPotionIII: { name: 'Hastey Potion III', type: 'cdr', val: 700, duration: 300000, desc: '-0.7s CD (5m)' },
+        sealedPotion: { name: 'Sealed Potion', type: 'sluck', val: 50000, desc: '+50k% S*Luck (1 roll)' },
+        heavenlyPotion: { name: 'Heavenly Potion', type: 'sluck', val: 200000, desc: '+200k% S*Luck (1 roll)' },
+        godlikePotion: { name: 'Godlike Potion', type: 'sluck', val: 500000, desc: '+500k% S*Luck (1 roll)' },
+        superFortunePotionI: { name: 'Super Fortune Potion I', type: 'luck', val: 500, duration: 120000, desc: '+500% Luck (2m)' },
+        superFortunePotionII: { name: 'Super Fortune Potion II', type: 'luck', val: 700, duration: 120000, desc: '+700% Luck (2m)' },
+        superSpeedPotionI: { name: 'Super Speed Potion I', type: 'cdr', val: 500, duration: 120000, desc: '-0.5s CD (2m)' },
+        superSpeedPotionII: { name: 'Super Speed Potion II', type: 'cdr', val: 650, duration: 120000, desc: '-0.65s CD (2m)' },
+        supremePotion: { name: 'Supreme Potion', type: 'supreme', val: 1000, duration: 300000, desc: '+1000% Luck and -0.3s CD (5m)' },
+        forgottenPotion: { name: 'Forgotten Potion', type: 'forgotten', val: 3500000, duration: 1, desc: '+3,500,000% S*Luck for 1 roll; grants access to Forgotten List roll' },
+        staryPotion: { name: 'Stary Potion', type: 'luck', val: 5000, duration: 120000, desc: '+5000% Luck (2m)' },
+        pointPotion: { name: 'Point Potion', type: 'point', val: 10000, desc: '+10000% Luck for 1 roll; chance for Point Exclusive item' }
+    };
+
+    const runeEffects = {
+        commonRune: { name: 'Common Rune', class: 'r-common' }, uncommonRune: { name: 'Uncommon Rune', class: 'r-uncommon' },
+        rareRune: { name: 'Rare Rune', class: 'r-rare' }, epicRune: { name: 'Epic Rune', class: 'r-epic' },
+        legendaryRune: { name: 'Legendary Rune', class: 'r-legendary' }, mythicRune: { name: 'Mythic Rune', class: 'r-mythic' }
+    };
+
+    const recipes = {
+        pickaxe: { name: 'Pickaxe', type: 'material', cost: { iron: 3 }, desc: 'Cracks Geos.' },
+        autoRoller: { name: 'Auto-Roller', type: 'misc', cost: { iron: 5, copper: 10, wood: 10, stone: 5 }, desc: 'Automates rolling.' },
+        smelter: { name: 'Smelter', type: 'misc', cost: { coal: 5, stone: 10, iron: 5 }, desc: 'Unlocks Gold Smelting' },
+        potionChest: { name: 'Potion Chest', type: 'material', cost: { wood: 10 }, desc: 'Crafts 1 Potion Chest.' },
+        rarePotionChest: { name: 'Rare Potion Chest', type: 'material', cost: { silver: 5 }, desc: 'Crafts 1 Rare Potion Chest.' },
+        megaChestGamble: { name: 'Mega Chest (Gamble)', type: 'material', cost: { topaz: 1, goldBar: 3, silver: 3 }, desc: '50% Mega Chest, 50% 3x Rare Chests.' },
+        elementPotionChest: { name: 'Element Potion Chest', type: 'material', cost: { snowyEssence: 1, waterEssence: 1, windEssence: 1 }, desc: 'Grants 1 roll from Mega Potion Chest loot table, with decreasing chances for additional rolls.' },
+        luminousShard: { name: 'Luminous Shard', type: 'material', cost: { luminousOrb: 2, luminousStone: 2 }, desc: 'Passive: +250% Luck per shard (Max 6)' },
+        heatwave: { name: 'Heatwave', type: 'material', cost: { essenceOfUnderworld: 2, fragmentOfHades: 1 }, desc: 'Passive: -0.2s CD and +500% Luck per heatwave (Max 5)' },
+        swiftGloves: { name: 'Swift Gloves', type: 'right', luck: 0, cdr: 100, cost: { wood: 5, stone: 5 }, desc: '-0.1s CD' },
+        snowyGlove: { name: 'Snowy Glove', type: 'right', luck: 50, cdr: 300, cost: { snowyEssence: 1, iron: 5, goldBar: 3 }, desc: '+50% Luck, -0.3s CD' },
+        windyGlove: { name: 'Windy Glove', type: 'right', luck: 75, cdr: 200, cost: { windEssence: 1, iron: 5, goldBar: 5, copper: 3, wood: 5 }, desc: '+75% Luck, -0.2s CD' },
+        rainMaker: { name: 'Rain Maker', type: 'right', luck: 40, cdr: 500, cost: { waterEssence: 2, copper: 10, wood: 15, goldBar: 3 }, desc: '+40% Luck, -0.5s CD' },
+        weatherDevice: { name: 'Weather Device', type: 'right', luck: 125, cdr: 700, cost: { rainMaker: 1, snowyGlove: 1, windyGlove: 1, topaz: 1, emerald: 1, goldBar: 10 }, desc: '+125% Luck, -0.7s CD' },
+        shiningSilverGlove: { name: 'Shining Silver Glove', type: 'right', luck: 155, cdr: 650, cost: { silver: 10, iron: 10, topaz: 2, emerald: 1 }, desc: '+155% Luck, -0.65s CD.' },
+        diamondGlove: { name: 'Diamond Glove', type: 'right', luck: 200, cdr: 650, cost: { diamond: 1, goldBar: 5, swiftGloves: 1 }, desc: '+200% Luck, -0.65s CD.' },
+        fragmentOfLuminosity: { name: 'Fragment of Luminosity', type: 'right', luck: 300, cdr: 800, cost: { luminousShard: 1, luminousStone: 5, luminousOrb: 2, diamondGlove: 1 }, desc: '+300% Luck, -0.8s CD' },
+        breathOfUnderworld: { name: 'Breath of the Underworld', type: 'right', luck: 450, cdr: 1200, cost: { fragmentOfHades: 1, essenceOfUnderworld: 3, diamondGlove: 1, copper: 40 }, desc: '+450% Luck, -1.2s CD' },
+        eternalFreezingDevice: { name: 'Eternal Freezing Device', type: 'right', luck: 550, cdr: 1000, cost: { essenceOfEternalFrost: 3, diamondGlove: 1, diamond: 3, luminousShard: 1, ruby: 5, silver: 10, iron: 50 }, desc: '+550% Luck, -1s CD' },
+        frostfireDevice: { name: 'Frostfire Device', type: 'right', luck: 500, cdr: 900, cost: { eternalFreezingDevice: 1, breathOfUnderworld: 1, amethyst: 5, diamondGlove: 1 }, desc: '+500% Luck, -0.9s CD' },
+        corruptedDevice: { name: 'Corrupted Device', type: 'right', luck: 620, cdr: 1300, cost: { corruptedFragment: 5, unknownOrb: 3, frostfireDevice: 1, goldBar: 50, amethyst: 20 }, desc: '+620% Luck, -1.3s CD' },
+        earthlyCharger: { name: 'Earthly Charger', type: 'right', luck: 500, cdr: 600, cost: { essenceOfTheEarth: 1, charger: 2, iron: 50 }, desc: '+500% Luck, -0.6s CD' },
+        abyssalGauntlet: { name: 'Abyssal Gauntlet', type: 'right', luck: 750, cdr: 1000, cost: { abyssOrb: 3, essenceOfTheAbyss: 1, fragmentOfTheAbyss: 1 }, desc: '+750% Luck, -1.0s CD' },
+        aegisOfLife: { name: 'Aegis of Life', type: 'right', luck: 1750, cdr: 1500, cost: { shardOfLife: 1, essenceOfLife: 1, gilded: 10 }, desc: '+1750% Luck, -1.5s CD' },
+        abyssalOverlord: { name: 'Abyssal Overlord', type: 'right', luck: 3250, cdr: 2000, cost: { abyssCore: 1, swordOfTheAbyss: 1, corruptedFragment: 3 }, desc: '+3250% Luck, -2.0s CD' },
+        bloodlustHarvester: { name: 'Bloodlust Harvester', type: 'right', luck: 6000, cdr: 2500, cost: { scytheFromTheBloodlust: 1, bloodFromTheAncientGod: 1, permafrost: 1 }, desc: '+6000% Luck, -2.5s CD' },
+        apexMech: { name: 'Apex Mech', type: 'right', luck: 5000, cdr: 2250, cost: { apexStone: 1, shardOfLife: 3, luminousShard: 6, heatwave: 5, permafrost: 1, abyssCore: 5, magicCrystal: 3, earthlyCharger: 3 }, desc: '+5000% Luck, -2.25s CD. Passive: Apex Awaken - Every 500 rolls, gain 2 random Apex buffs.' },
+        singularityCore: { name: 'Singularity Core', type: 'right', luck: 7500, cdr: 2800, cost: { singularity: 1, luminousShard:3, abyssCore: 1 }, desc: '+7500% Luck, -2.8s CD' },
+        midnightBringerGear: { name: 'Midnight Bringer Gear', type: 'right', luck: 10000, cdr: 3000, cost: { midnightBringer: 1, magicCrystal: 5,abyssCore:3}, desc: '+10000% Luck, -3.0s CD' },
+        starscourgeEdge: { name: 'Starscourge Edge', type: 'right', luck: 13500, cdr: 3200, cost: { starscourge: 1, corruptedFragment: 5, shiningSilverGlove:1 }, desc: '+13500% Luck, -3.2s CD' },
+        atlasDrive: { name: 'Atlas Drive', type: 'right', luck: 30000, cdr: 4000, cost: { atlas: 1,aegisOfLife:1 , essenceOfTheEarth: 10 }, desc: '+30000% Luck, -4.0s CD' },
+
+        runeOfLife: { name: 'Rune of Life', type: 'material', cost: { shardOfLife: 2, charger: 3, essenceOfTheEarth: 2 }, desc: 'Grants +1000% Luck, -0.4s CD, and builds Life stacks.' },
+        fullyChargedRune: { name: 'Fully Charged Rune', type: 'material', cost: { brokenRune: 3, charger: 10, magicCrystal: 5 }, desc: 'Generates runes every 500 rolls.' },
+        woodChopper: { name: 'Wood Chopper', type: 'left', luck: 0, cdr: 0, cost: { wood: 5, stone: 5 , iron:2}, desc: 'Forces rolls to only Wood and Stone. Ignores luck bonuses. Bonus: +1 Wood every 5 rolls.' },
+        metalMiner: { name: 'Metal Miner', type: 'left', luck: 15, cdr: 0, cost: { iron: 5, goldBar: 3, silver: 3, copper: 5 }, desc: 'Forces rolls to only Metal items (Iron, Gold Ore, Copper, Silver). Ignores luck bonuses. Bonus: +1 Iron every 5 rolls.' },
+        geoMiner: { name: 'Geo Miner', type: 'left', luck: 25, cdr: 0, cost: { gemstoneGeo: 3, emerald: 1, topaz: 3, goldBar: 3 }, desc: 'Forces rolls to only Geo-related items (Gems & Stones). Ignores luck bonuses. Bonus: +1 Gemstone Geo every 5 rolls.' },
+        gemstoneDevice: { name: 'Gemstone Device', type: 'left', luck: 0, cdr: 0, cost: { topaz: 5, emerald: 3, ruby: 1, diamond: 1 }, desc: 'Grants 2x Luck every 10 rolls.' },
+        academyOfCryosis: { name: 'Academy of the Cryosis', type: 'left', luck: 750, cdr: 300, cost: { pieceOfCryosis: 1, essenceOfEternalFrost: 5, luminousShard: 3 }, desc: 'Builds Frost to trigger 5x Permafrost.' },
+        theGreatMonarch: { name: 'The Great Monarch', type: 'left', luck: 1000, cdr: 1200, cost: { corruptedFragment: 5, swordOfGreatMonarch: 1, unknownOrb: 3, silver: 10 }, desc: 'Builds Corruption for buffs.' },
+        runeOfTheEverlasting: { name: 'Rune of the Everlasting', type: 'left', luck: 600, cdr: 1000, cost: { brokenRune: 5, magicCrystal: 1, pieceOfTheEverlastingFlame: 1 }, desc: 'Generates 1 random Rune every 100 rolls.' },
+        theDivineApex: { name: 'The Divine Apex', type: 'left', luck: 0, cdr: 0, cost: { divineSword: 1, apexStone: 1, featherOfTheArchangel: 1, celestial: 5 }, desc: 'Min CD is 0.02s. Total Luck is 5x.' },
+        northernLightSigil: { name: 'Northern Light Sigil', type: 'left', luck: 5000, cdr: 2000, cost: { northernLight: 1, essenceOfEternalFrost: 10, pieceOfCryosis:5 }, desc: '+5000% Luck, -2.0s CD' },
+        oblivionWarding: { name: 'Oblivion Warding', type: 'left', luck: 15000, cdr: 3500, cost: { oblivion: 1, unknownOrb: 15, essenceOfUnderworld: 10 }, desc: '+15000% Luck, -3.5s CD' },
+        abyssSlayer: { name: 'Abyss Slayer', type: 'material', cost: { swordOfTheAbyss: 1, abyssCore: 5, pieceOfTheEverlastingFlame: 3, abyssOrb: 10, corruptedFragment: 3 }, desc: '+2000% Luck and -0.6s CD; grants Abyss Slayer stacks each roll.' },
+        galaxy: { name: 'Galaxy', type: 'material', cost: { starscourge: 1, singularity: 1, permafrost: 3, runeOfLife: 1 }, desc: 'Every 1000 rolls picks a random Stary reward.' }
+    };
+
+    function getRarityFormat(weight) {
+        let chance = Math.ceil(baseTotalWeight / weight);
+        let label, className;
+        if (chance < 100) { label = 'Common'; className = 'r-common'; }
+        else if (chance < 1000) { label = 'Uncommon'; className = 'r-uncommon'; }
+        else if (chance < 10000) { label = 'Rare'; className = 'r-rare'; }
+        else if (chance < 100000) { label = 'Epic'; className = 'r-epic'; }
+        else if (chance < 1000000) { label = 'Legendary'; className = 'r-legendary'; }
+        else if (chance < 10000000) { label = 'Mythic'; className = 'r-mythic'; }
+        else if (chance < 100000000) { label = 'Exalted'; className = 'r-exalted'; }
+        else if (chance < 1000000000) { label = 'Glorious'; className = 'r-glorious'; }
+        else { label = 'Transcendent'; className = 'r-transcendent'; }
+        return { class: className, label: label, chance: chance };
+    }
+
+    function logMessage(msg) {
+        const logDiv = document.getElementById('activityLog');
+        logDiv.innerHTML += `<div>> ${msg}</div>`;
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function setSkipCutscene(level, value) {
+        if (level === 'exalted') skipCutsceneExalted = value;
+        if (level === 'glorious') skipCutsceneGlorious = value;
+        if (level === 'transcendent') skipCutsceneTranscendent = value;
+        saveGame();
+    }
+
+    function showCutscene(itemId) {
+        const cutsceneDiv = document.getElementById('cutscene');
+        const textDiv = document.getElementById('cutsceneText');
+        let text = '';
+        let duration = 6000 + Math.random() * 2000; // 6-8 seconds
+
+        const item = baseLootTable.find(i => i.id === itemId);
+        if (item) {
+            const chance = Math.ceil(baseTotalWeight / item.weight);
+            if ((chance >= 10000000 && chance < 100000000 && skipCutsceneExalted) ||
+                (chance >= 100000000 && chance < 1000000000 && skipCutsceneGlorious) ||
+                (chance >= 1000000000 && skipCutsceneTranscendent)) {
+                return; // cutscene skipped by player choice
+            }
+        }
+
+        switch(itemId) {
+            case 'divineSword':
+                text = "The heavens tremble as divine light pierces the veil...<br><br>A legendary sword, forged in the fires of creation itself, descends from the celestial forge.<br><br>The Divine Sword has chosen you as its worthy bearer.";
+                break;
+            case 'bloodFromTheAncientGod':
+                text = "Ancient whispers echo through the ages...<br><br>The blood of a primordial deity, spilled in the dawn of time, now flows into your possession.<br><br>The essence of godhood courses through your veins.";
+                break;
+            case 'featherOfTheArchangel':
+                text = "Wings of pure light unfold across the sky...<br><br>A single feather from the Archangel's plumage, carrying the weight of heavenly judgment.<br><br>The heavens themselves acknowledge your destiny.";
+                break;
+            case 'scytheFromTheBloodlust':
+                text = "The air grows thick with the scent of inevitable demise...<br><br>A scythe born from the collective bloodlust of fallen warriors, hungry for souls.<br><br>The reaper's tool now rests in mortal hands.";
+                break;
+            case 'apexStone':
+                text = "Reality bends as the pinnacle of existence manifests...<br><br>The Apex Stone, containing the compressed power of infinite possibilities.<br><br>You have reached the true summit of fortune.";
+                break;
+            case 'singularity':
+                text = "The universe converges into a single point of infinite density...<br><br>The Singularity, where all matter and energy collapse into boundless potential.<br><br>You have grasped the core of creation itself.";
+                break;
+            case 'midnightBringer':
+                text = "Shadows deepen as the hour of midnight approaches...<br><br>The Midnight Bringer, herald of darkness and unseen forces.<br><br>The night itself bows to your command.";
+                break;
+            case 'starscourge':
+                text = "Celestial bodies tremble under a cosmic plague...<br><br>The Starscourge, a blight that devours the light of stars.<br><br>You wield the power to extinguish galaxies.";
+                break;
+            case 'starscourgeRadiant':
+                text = "A radiant dawn erupts across the cosmos...<br><br>Starscourge: Radiant, the rarest celestial paradox, reborn in your hands!";
+                duration = 12000;
+                break;
+            default:
+                if (item && Math.ceil(baseTotalWeight / item.weight) >= 1000000000) {
+                    text = "The fabric of reality unravels as a transcendent artifact emerges...<br><br>Beyond mortal comprehension, this item defies the laws of probability itself.<br><br>You have transcended the boundaries of luck and fortune.";
+                    duration = 10000 + Math.random() * 3000; // 10-13 seconds for transcendent
+                } else {
+                    text = "A legendary artifact of unimaginable rarity has been bestowed upon you.";
+                }
+        }
+
+        // disable auto-roll during cutscene
+        if (isAutoRolling) {
+            clearInterval(autoRollTimer);
+            autoRollTimer = null;
+            isAutoRolling = false;
+            const autoBtn = document.getElementById('autoRollBtn');
+            if (autoBtn) { autoBtn.style.backgroundColor = '#673ab7'; autoBtn.innerText = '🔄 Enable Auto-Roll'; }
+            logMessage('⏸️ Auto-roll paused for cutscene.');
+        }
+
+        textDiv.innerHTML = text;
+        cutsceneDiv.style.display = 'block';
+
+        setTimeout(() => {
+            cutsceneDiv.style.display = 'none';
+            logMessage('▶️ Cutscene ended. You may resume auto-roll manually.');
+        }, duration);
+    }
+
+    function applyApexBuff(buff) {
+        switch (buff) {
+            case 1:
+                stats.sLuckReady += 10000000;
+                logMessage("🌟 Apex Buff: +10,000,000% S*Luck for next roll!");
+                break;
+            case 2:
+                stats.multipliers.push({ mult: 100, rolls: 5 });
+                logMessage("🌟 Apex Buff: 100x Luck multiplier for 5 rolls!");
+                break;
+            case 3:
+                stats.apexCdrRolls += 50;
+                logMessage("🌟 Apex Buff: -3s CD for 50 rolls!");
+                break;
+            case 4:
+                stats.activePotions.forEach(p => {
+                    let remaining = p.expiresAt - Date.now();
+                    if (remaining > 0) p.expiresAt += remaining * 0.1;
+                });
+                logMessage("🌟 Apex Buff: All potion durations extended by 10%!");
+                break;
+            case 5:
+                let rand = Math.random();
+                let rune;
+                if (rand < 0.6) rune = 'legendaryRune';
+                else if (rand < 0.95) rune = 'mythicRune';
+                else rune = 'exaltedRune';
+                materials[rune]++;
+                logMessage(`🌟 Apex Buff: Granted 1x <span class="${runeEffects[rune].class}">${runeEffects[rune].name}</span>!`);
+                break;
+        }
+    }
+
+    const t2LuckPotions = ['fortunePotionI', 'fortunePotionII', 'fortunePotionIII'];
+    const t2SpeedPotions = ['hasteyPotionI', 'hasteyPotionII', 'hasteyPotionIII'];
+
+    function usePotion(id) {
+        if (materials[id] <= 0) return;
+        let pot = potionEffects[id];
+        
+        if (pot.type === 'sluck') {
+            if (stats.sLuckRemainingRolls > 0 && !stats.allowSluckStacking) return logMessage("❌ S*Luck buff already active!");
+            let extraRolls = 0;
+            if (id === 'sealedPotion') extraRolls = stats.sealedPotionExtraRolls;
+            if (id === 'heavenlyPotion') extraRolls = stats.heavenlyPotionExtraRolls;
+            if (id === 'godlikePotion') extraRolls = stats.godlikePotionExtraRolls;
+            if (id === 'heavenlyPotion' && stats.heavenlyAndSealedStacking) stats.allowSluckStacking = true;
+            if (id === 'godlikePotion' && stats.godlikeStacking) stats.allowSluckStacking = true;
+
+            stats.sLuckBaseReady = pot.val;
+            stats.sLuckRemainingRolls = 1 + extraRolls;
+            stats.sLuckReady = pot.val;
+            materials[id]--;
+            logMessage(`🧪 Drank <span class="sluck">${pot.name}</span>! Ready for next ${stats.sLuckRemainingRolls} rolls.`);
+        } else if (pot.type === 'forgotten') {
+            stats.forgottenActive = 1;
+            materials[id]--;
+            logMessage(`🧪 Drank <span class="r-collectable">${pot.name}</span>! You will attempt a Forgotten roll next item.`);
+        } else if (pot.type === 'point') {
+            stats.sLuckReady = pot.val;
+            stats.pointPotionActive = 1;
+            materials[id]--;
+            logMessage(`🧪 Drank ${pot.name}! Next roll has +10000% Luck and chance for Point Exclusive item!`);
+        } else {
+            // Check stacking logic
+            let isT2Luck = t2LuckPotions.includes(id);
+            let isT2Speed = t2SpeedPotions.includes(id);
+
+            let duration = pot.duration;
+            if (pot.type !== 'sluck' && pot.type !== 'forgotten' && pot.type !== 'point') {
+                duration = Math.ceil(duration * (1 + stats.potionDurationPercentBonus));
+            }
+
+            let existingIndex = stats.activePotions.findIndex(p => p.id === id);
+            
+            if (existingIndex > -1) {
+                stats.activePotions[existingIndex].expiresAt += duration;
+                materials[id]--;
+                logMessage(`🧪 Extended ${pot.name} duration!`);
+            } else {
+                if (isT2Luck && stats.activePotions.some(p => t2LuckPotions.includes(p.id))) {
+                    return logMessage("❌ You already have a Fortune potion active!");
+                }
+                if (isT2Speed && stats.activePotions.some(p => t2SpeedPotions.includes(p.id))) {
+                    return logMessage("❌ You already have a Hastey potion active!");
+                }
+                let isT3Luck = ['superFortunePotionI', 'superFortunePotionII'].includes(id);
+                let isT3Speed = ['superSpeedPotionI', 'superSpeedPotionII'].includes(id);
+                if (isT3Luck && stats.activePotions.some(p => ['superFortunePotionI', 'superFortunePotionII'].includes(p.id))) {
+                    return logMessage("❌ You already have a Super Fortune potion active!");
+                }
+                if (isT3Speed && stats.activePotions.some(p => ['superSpeedPotionI', 'superSpeedPotionII'].includes(p.id))) {
+                    return logMessage("❌ You already have a Super Speed potion active!");
+                }
+                if (id === 'supremePotion' && stats.activePotions.some(p => p.id === 'supremePotion')) {
+                    return logMessage("❌ Supreme Potion already active!");
+                }
+                materials[id]--;
+                stats.activePotions.push({ id, name: pot.name, type: pot.type, val: pot.val, expiresAt: Date.now() + pot.duration });
+                logMessage(`🧪 Drank ${pot.name}! Gained ${pot.desc}.`);
+            }
+        }
+        updateUI(); saveGame();
+    }
+
+    function formatName(id) {
+        return id.replace(/([A-Z])/g, ' $1').replace(/[a-z]/g, c => c.toUpperCase());
+    }
+
+    function buyShopItem(itemName, price, bundle) {
+        if (materials.P < price) return logMessage(`❌ Need ${price}P!`);
+        materials.P -= price;
+        if (bundle === 'small') {
+            const p = [{ id: 'luckyPotion', w: 30 }, { id: 'speedyPotion', w: 30 }, { id: 'fortunePotionI', w: 20 }, { id: 'hasteyPotionI', w: 20 }];
+            let w = p.reduce((s, e) => s + e.w, 0);
+            for (let i = 0; i < 3; i++) { let r = Math.random() * w, c = 0, d = p[0]; for (let e of p) { c += e.w; if (r <= c) { d = e; break; } } materials[d.id]++; }
+            logMessage(`📦 Small Bundle!`);
+        } else if (bundle === 'medium') {
+            materials.hasteyPotionIII += 3; materials.fortunePotionIII += 3;
+            const p = [{ id: 'fortunePotionII', w: 20 }, { id: 'hasteyPotionII', w: 20 }, { id: 'fortunePotionIII', w: 15 }, { id: 'hasteyPotionIII', w: 15 }, { id: 'superFortunePotionI', w: 10 }, { id: 'superSpeedPotionI', w: 10 }, { id: 'sealedPotion', w: 5 }, { id: 'supremePotion', w: 5 }];
+            let w = p.reduce((s, e) => s + e.w, 0);
+            for (let i = 0; i < 3; i++) { let r = Math.random() * w, c = 0, d = p[0]; for (let e of p) { c += e.w; if (r <= c) { d = e; break; } } materials[d.id]++; }
+            logMessage(`📦 Medium Bundle!`);
+        } else if (bundle === 'large') {
+            materials.superSpeedPotionII += 3; materials.superFortunePotionII += 3; materials.fortunePotionIII += 5; materials.hasteyPotionIII += 5;
+            const p = [{ id: 'fortunePotionII', w: 20 }, { id: 'hasteyPotionII', w: 20 }, { id: 'fortunePotionIII', w: 15 }, { id: 'hasteyPotionIII', w: 15 }, { id: 'superFortunePotionI', w: 10 }, { id: 'superSpeedPotionI', w: 10 }, { id: 'sealedPotion', w: 5 }, { id: 'supremePotion', w: 5 }];
+            let w = p.reduce((s, e) => s + e.w, 0);
+            for (let i = 0; i < 8; i++) { let r = Math.random() * w, c = 0, d = p[0]; for (let e of p) { c += e.w; if (r <= c) { d = e; break; } } materials[d.id]++; }
+            logMessage(`📦 Large Bundle!`);
+        } else if (bundle === 'mega') {
+            materials.supremePotion += 3; materials.superSpeedPotionII += 8; materials.superFortunePotionII += 8;
+            const p = [{ id: 'fortunePotionII', w: 20 }, { id: 'hasteyPotionII', w: 20 }, { id: 'fortunePotionIII', w: 15 }, { id: 'hasteyPotionIII', w: 15 }, { id: 'superFortunePotionI', w: 10 }, { id: 'superSpeedPotionI', w: 10 }, { id: 'sealedPotion', w: 5 }, { id: 'supremePotion', w: 5 }];
+            let w = p.reduce((s, e) => s + e.w, 0);
+            for (let i = 0; i < 15; i++) { let r = Math.random() * w, c = 0, d = p[0]; for (let e of p) { c += e.w; if (r <= c) { d = e; break; } } materials[d.id]++; }
+            logMessage(`📦 Mega Bundle!`);
+        } else {
+            const items = {'(Lucky Potion + Speedy Potion) x30': { luckyPotion: 30, speedyPotion: 30 }, '(Haste I + Fortune I) x30': { hasteyPotionI: 30, fortunePotionI: 30 }, '(Haste II + Fortune II) x15': { hasteyPotionII: 15, fortunePotionII: 15 }, '(Haste III + Fortune III) x5': { hasteyPotionIII: 5, fortunePotionIII: 5 }, '(Super Fortune I + Super Speed I) x5': { superFortunePotionI: 5, superSpeedPotionI: 5 }, '(Super Fortune II + Super Speed II) x5': { superFortunePotionII: 5, superSpeedPotionII: 5 }, 'Supreme Potion x3': { supremePotion: 3 }, 'Point Potion': { pointPotion: 1 }};
+            if (items[itemName]) { for (let [item, count] of Object.entries(items[itemName])) { materials[item] += count; } }
+        }
+        updateUI(); saveGame();
+    }
+
+    function attemptForgottenItemRoll() {
+        const forgottenEntries = [
+            { id: 'crownOfTheAncient', chance: 1/10000 },
+            { id: 'theForbiddenBook', chance: 1/1000 },
+            { id: 'memory', chance: 1/250 },
+            { id: 'abandonedRock', chance: 1/50 }
+        ];
+
+        for (let entry of forgottenEntries) {
+            if (Math.random() < entry.chance) {
+                specialItems[entry.id] = (specialItems[entry.id] || 0) + 1;
+                logMessage(`[<span class="r-collectable">Collectable</span>] Forgotten roll: Found 1x <span class="r-collectable">${formatName(entry.id)}</span>!`);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function attemptStaryPotionRoll() {
+        if (materials.staryPotion <= 0) return false;
+        if (Math.random() < 1/10000) {
+            specialItems.starscourgeRadiant = (specialItems.starscourgeRadiant || 0) + 1;
+            logMessage(`[<span class="r-collectable">Collectable</span>] Stary roll: Found 1x <span class="r-transcendent">Starscourge: Radiant</span>!`);
+            showCutscene('starscourgeRadiant');
+            return true;
+        }
+        return false;
+    }
+
+    function openChest(type, skipUpdate = false) {
+        if (materials[type] <= 0) return;
+        materials[type]--;
+        let table, rolls;
+        if (type === 'elementPotionChest') {
+            table = potionTables.megaPotionChest;
+            // Guaranteed 1 roll, then 70% chance for second, 35% for third, etc.
+            rolls = 1;
+            let chance = 0.7;
+            while (Math.random() < chance && rolls < 10) { // Cap at 10 to prevent infinite loop
+                rolls++;
+                chance /= 2;
+            }
+        } else {
+            table = potionTables[type];
+            rolls = 3;
+        }
+        let totalW = table.reduce((sum, i) => sum + i.weight, 0);
+        
+        logMessage(`📦 Opening ${type.replace(/([A-Z])/g, ' $1').trim()}...`);
+        for(let i=0; i<rolls; i++) {
+            let r = Math.random() * totalW; let cw = 0; let selected = table[0];
+            for (let item of table) { cw += item.weight; if (r <= cw) { selected = item; break; } }
+            materials[selected.id]++;
+            logMessage(`  - Found 1x <span class="highlight">${potionEffects[selected.id]?.name || selected.id}</span>!`);
+        }
+        if (!skipUpdate) {
+            updateUI(); saveGame();
+        }
+    }
+
+    function openAllChests() {
+        let startTime = performance.now();
+        let chestTypes = ['potionChest', 'rarePotionChest', 'megaPotionChest', 'elementPotionChest'];
+        let openedAny = false;
+        for (let type of chestTypes) {
+            while (materials[type] > 0) {
+                openChest(type, true);
+                openedAny = true;
+                // Prevent infinite loops and UI freezing
+                if (performance.now() - startTime > 50) { // Limit to 50ms per batch
+                    setTimeout(() => openAllChests(), 10);
+                    return;
+                }
+            }
+        }
+        if (!openedAny) {
+            logMessage("📦 No chests to open!");
+        } else {
+            updateUI(); saveGame();
+        }
+    }
+
+    function cleanupPotions() {
+        let now = Date.now(); let initLen = stats.activePotions.length;
+        stats.activePotions = stats.activePotions.filter(p => {
+            if (now >= p.expiresAt) { logMessage(`⏳ ${p.name} wore off.`); return false; } return true;
+        });
+        if (stats.activePotions.length !== initLen) updateUI();
+    }
+
+    function useRune(runeId) {
+        if (materials[runeId] <= 0) return;
+        materials[runeId]--;
+        
+        let minW = 0, maxW = 999999;
+        if(runeId === 'commonRune') { minW = 2290; }
+        else if(runeId === 'uncommonRune') { minW = 229; maxW = 2290; }
+        else if(runeId === 'rareRune') { minW = 22.9; maxW = 229; }
+        else if(runeId === 'epicRune') { minW = 2.29; maxW = 22.9; }
+        else if(runeId === 'legendaryRune') { minW = 0.229; maxW = 2.29; }
+        else if(runeId === 'mythicRune') { minW = 0.0229; maxW = 0.229; }
+
+        let pool = baseLootTable.filter(i => i.weight >= minW && i.weight < maxW);
+        let tw = pool.reduce((sum, i) => sum + i.weight, 0);
+        let r = Math.random() * tw; let cw = 0; let selected = pool[0];
+        for (let item of pool) { cw += item.weight; if (r <= cw) { selected = item; break; } }
+        
+        materials[selected.id]++;
+        let rarity = getRarityFormat(selected.weight);
+        logMessage(`[<span class="${rarity.class}">Rune Forced</span>] Found 1x <span class="${rarity.class}">${selected.name}</span> (1/${rarity.chance})!`);
+        updateUI(); saveGame();
+    }
+
+    function calculateFinalRollStats() {
+        let luck = 0; let cdr = 0;
+        if (equipped.left && recipes[equipped.left]) { luck += recipes[equipped.left].luck || 0; cdr += recipes[equipped.left].cdr || 0; }
+        if (equipped.right && recipes[equipped.right]) { luck += recipes[equipped.right].luck || 0; cdr += recipes[equipped.right].cdr || 0; }
+        luck += (materials.luminousShard * 250);
+        luck += (materials.heatwave * 500);
+        cdr += (materials.heatwave * 200);
+        if (stats.apexCdrRolls > 0) cdr += 3000; // -3s from Apex Buff
+
+        // Rune of Life base bonuses
+        if (materials.runeOfLife > 0) {
+            luck += materials.runeOfLife * 1000;
+            cdr += materials.runeOfLife * 400;
+        }
+
+        if (materials.abyssSlayer > 0) {
+            luck += materials.abyssSlayer * 2000;
+            cdr += materials.abyssSlayer * 600;
+        }
+
+        luck += stats.abyssSlayerExtraLuck;
+        cdr += stats.abyssSlayerExtraCdr;
+
+        luck += stats.permanentLuck;
+        cdr += stats.permanentCdr;
+
+        stats.activePotions.forEach(p => { 
+            if (p.type === 'luck') luck += p.val; 
+            if (p.type === 'cdr') cdr += p.val; 
+            if (p.type === 'supreme') { luck += 1000; cdr += 300; }
+        });
+
+        let finalLuck = luck; let finalCdr = cdr;
+        let activeMultiplier = 1; let overflowText = "";
+
+        let currentMinCD = (equipped.left === 'theDivineApex') ? 20 : baseMinCooldown;
+
+        if (finalCdr > (baseCooldown - currentMinCD)) {
+            let extraMs = finalCdr - (baseCooldown - currentMinCD);
+            let overflowMult = 1 + ((extraMs / 500) * 2);
+            activeMultiplier *= overflowMult;
+            finalCdr = baseCooldown - currentMinCD; 
+            overflowText = `(CD Overflow: ${overflowMult.toFixed(2)}x Luck!)`;
+        }
+
+        if (stats.curse3Timer > 0) finalLuck = 1;
+        else {
+            stats.additives.forEach(buff => finalLuck += buff.val);
+            stats.luckNegatives.forEach(buff => finalLuck = Math.max(0, finalLuck - buff.val));
+        }
+
+        stats.cdrAdditives.forEach(buff => finalCdr += buff.val);
+        stats.cdrNegatives.forEach(buff => finalCdr -= buff.val);
+
+        stats.multipliers.sort((a, b) => b.mult - a.mult);
+        if (stats.multipliers.length > 0) activeMultiplier *= stats.multipliers[0].mult;
+
+        activeMultiplier *= stats.abyssSlayerMultiplier;
+        activeMultiplier *= stats.trueAbyssSlayerLuckMultiplier;
+        
+        if (equipped.left === 'gemstoneDevice' && totalRolls % 10 === 0 && totalRolls > 0) { finalLuck = finalLuck > 0 ? finalLuck : 100; activeMultiplier *= 2; }
+        if (equipped.left === 'theDivineApex') { activeMultiplier *= 5; }
+
+        if (stats.permafrost > 0) { activeMultiplier *= 5; finalCdr = -2000; }
+
+        let specialTypes = Object.keys(specialItems).filter(id => specialItems[id] > 0).length;
+        if (specialTypes > 0) {
+            const specialMult = Math.pow(1.2, specialTypes);
+            activeMultiplier *= specialMult;
+            overflowText += ` (Collectables bonus: x${specialMult.toFixed(2)})`;
+        }
+
+        // Life stacks bonuses
+        if (stats.lifeStacks >= 20000) {
+            finalCdr += 500;
+            activeMultiplier *= 1.2;
+        } else if (stats.lifeStacks >= 7500) {
+            finalCdr += 300;
+            activeMultiplier *= 1.01;
+        } else if (stats.lifeStacks >= 3000) {
+            finalCdr += 300;
+            finalLuck += 1250;
+        } else if (stats.lifeStacks >= 1500) {
+            finalCdr += 200;
+            finalLuck += 750;
+        } else if (stats.lifeStacks >= 500) {
+            finalCdr += 200;
+            finalLuck += 500;
+        }
+
+        // Northern Light Sigil bonuses
+        if (equipped.left === 'northernLightSigil') {
+            finalLuck += Math.floor(stats.eternalGuidance / 1000) * 500;
+            finalCdr += Math.floor(stats.eternalGuidance / 2500) * 20;
+            activeMultiplier *= (1 + Math.floor(stats.eternalGuidance / 10000) * 0.1);
+        }
+
+        // Abyss luck multiplier
+        activeMultiplier *= stats.abyssLuckMultiplier;
+
+        finalLuck = finalLuck * activeMultiplier;
+        return { finalLuck, finalCdr, activeMultiplier, overflowText, currentMinCD };
+    }
+
+    function processRollTick() {
+        
+        if (stats.abyssRollsLeft > 0) {
+            stats.abyssRollsLeft--;
+            if (stats.abyssRollsLeft === 0) {
+                stats.abyssLuckMultiplier = 1;
+            }
+        }
+        
+        if (stats.curse3Timer > 0) stats.curse3Timer--;
+        for (let i = stats.additives.length - 1; i >= 0; i--) { stats.additives[i].rolls--; if (stats.additives[i].rolls <= 0) stats.additives.splice(i, 1); }
+        for (let i = stats.cdrAdditives.length - 1; i >= 0; i--) { stats.cdrAdditives[i].rolls--; if (stats.cdrAdditives[i].rolls <= 0) stats.cdrAdditives.splice(i, 1); }
+        for (let i = stats.luckNegatives.length - 1; i >= 0; i--) { stats.luckNegatives[i].rolls--; if (stats.luckNegatives[i].rolls <= 0) stats.luckNegatives.splice(i, 1); }
+        for (let i = stats.cdrNegatives.length - 1; i >= 0; i--) { stats.cdrNegatives[i].rolls--; if (stats.cdrNegatives[i].rolls <= 0) stats.cdrNegatives.splice(i, 1); }
+        if (stats.multipliers.length > 0) { stats.multipliers[0].rolls--; if (stats.multipliers[0].rolls <= 0) stats.multipliers.shift(); }
+        if (stats.apexCdrRolls > 0) stats.apexCdrRolls--;
+        
+        if (equipped.left === 'theGreatMonarch') {
+            stats.corruption += 3; // buffed from 1 to 3 per roll
+        }
+        if (equipped.right === 'corruptedDevice') {
+            stats.corruption += 1; // 1 per roll
+        }
+        if (materials.runeOfLife > 0) {
+            stats.lifeStacks += materials.runeOfLife;
+            if (stats.lifeStacks > 20000) stats.lifeStacks = 20000;
+        }
+        if (equipped.left === 'northernLightSigil') {
+            stats.eternalGuidance += 1;
+            if (stats.eternalGuidance > 100000) stats.eternalGuidance = 100000;
+        }
+
+        if (materials.abyssSlayer > 0) {
+            stats.abyssSlayerStacks = Math.min(stats.abyssSlayerStacks + 1, 12500);
+            if (stats.abyssSlayerStacks === 500) { materials.forgottenPotion += 1; stats.permanentCdr += 100; logMessage('🗡️ Abyss Slayer: +1 Forgotten Potion, -0.1s CD!'); }
+            if (stats.abyssSlayerStacks === 1000) { materials.forgottenPotion += 1; stats.permanentCdr += 300; logMessage('🗡️ Abyss Slayer: +1 Forgotten Potion, -0.3s CD!'); }
+            if (stats.abyssSlayerStacks === 2000) { materials.forgottenPotion += 2; stats.permanentCdr += 500; stats.permanentLuck += 500; logMessage('🗡️ Abyss Slayer: +2 Forgotten Potions, -0.5s CD, +500% Luck!'); }
+            if (stats.abyssSlayerStacks === 3500) { materials.forgottenPotion += 4; stats.permanentCdr += 500; stats.permanentLuck += 1000; logMessage('🗡️ Abyss Slayer: +4 Forgotten Potions, -0.5s CD, +1000% Luck!'); }
+            if (stats.abyssSlayerStacks === 5000) { materials.forgottenPotion += 5; stats.permanentLuck += 2500; stats.abyssSlayerMultiplier *= 1.01; logMessage('🗡️ Abyss Slayer: +5 Forgotten Potions, +2500% Luck, +1% final Luck!'); }
+            if (stats.abyssSlayerStacks === 10000) { stats.permanentLuck += 3500; stats.permanentCdr += 1000; stats.abyssSlayerMultiplier *= 1.01; logMessage('🗡️ Abyss Slayer: +3500% Luck, -1s CD, +1% final Luck!'); }
+            if (stats.abyssSlayerStacks === 12500) { stats.abyssSlayerAwakened = true; logMessage('🌌 Abyss Slayer Awakened! True Abyss Slayer stacks unlocked.'); }
+        }
+
+        if (equipped.left === 'oblivionWarding') {
+            stats.theAbyss += 1;
+            if (stats.theAbyss > 5000) stats.theAbyss = 5000;
+            if (stats.theAbyss === 500) {
+                stats.abyssLuckMultiplier = 10;
+                stats.abyssRollsLeft = 5;
+                logMessage("🌑 Abyss: 10x Luck for 5 rolls!");
+            } else if (stats.theAbyss === 1000) {
+                stats.abyssLuckMultiplier = 25;
+                stats.abyssRollsLeft = 5;
+                logMessage("🌑 Abyss: 25x Luck for 5 rolls!");
+            } else if (stats.theAbyss === 2500) {
+                stats.abyssLuckMultiplier = 100;
+                stats.abyssRollsLeft = 5;
+                logMessage("🌑 Abyss: 100x Luck for 5 rolls!");
+            } else if (stats.theAbyss === 5000) {
+                stats.abyssLuckMultiplier = 1000;
+                stats.abyssRollsLeft = 5;
+                logMessage("🌑 Abyss: 1000x Luck for 5 rolls!");
+                // Reset and apply permanent bonuses
+                stats.theAbyss = 0;
+                stats.permanentCdr += 50; // -0.05s
+                stats.permanentLuck += 1500;
+                materials.forgottenPotion += 3;
+                logMessage("🌑 Abyss Loop Complete: Permanent -0.05s CD, +1500% Luck, +3 Forgotten Potions!");
+            }
+        }
+        if (stats.corruption >= 1000) {
+            stats.corruption = 0;
+            // Roll 3 corruption buffs
+            for (let i = 0; i < 3; i++) {
+                let buff = Math.floor(Math.random() * 10) + 1;
+                switch (buff) {
+                    case 1:
+                        stats.additives.push({ val: 1000, rolls: 1 });
+                        stats.multipliers.push({ mult: 10, rolls: 10 });
+                        logMessage("💀 Corruption: +1000% Luck then 10x for 10 rolls!");
+                        break;
+                    case 2:
+                        stats.additives.push({ val: 1000, rolls: 1 });
+                        stats.multipliers.push({ mult: 8, rolls: 5 });
+                        logMessage("💀 Corruption: +1000% Luck then 8x for 5 rolls!");
+                        break;
+                    case 3:
+                        stats.multipliers.push({ mult: 10, rolls: 10 });
+                        logMessage("💀 Corruption: 10x Luck for 10 rolls!");
+                        break;
+                    case 4:
+                        stats.multipliers.push({ mult: 5, rolls: 15 });
+                        logMessage("💀 Corruption: 5x Luck for 15 rolls!");
+                        break;
+                    case 5:
+                        stats.additives.push({ val: 500, rolls: 1 });
+                        stats.multipliers.push({ mult: 2, rolls: 10 });
+                        logMessage("💀 Corruption: +500% Luck then 2x for 10 rolls!");
+                        break;
+                    case 6:
+                        stats.additives.push({ val: 1500, rolls: 25 });
+                        logMessage("💀 Corruption: +1500% Luck for 25 rolls!");
+                        break;
+                    case 7:
+                        stats.additives.push({ val: 500, rolls: 100 });
+                        stats.cdrAdditives.push({ val: 1000, rolls: 100 });
+                        logMessage("💀 Corruption: -1s CD and +500% Luck for 100 rolls!");
+                        break;
+                    case 8:
+                        stats.permanentCdr += 20;
+                        stats.permanentLuck += 50;
+                        logMessage("💀 Corruption: Permanent -0.02s CD and +50% Luck!");
+                        break;
+                    case 9:
+                        stats.luckNegatives.push({ val: 100, rolls: 30 });
+                        logMessage("💀 Corruption: Luck set to 0% for 30 rolls!");
+                        break;
+                    case 10:
+                        stats.luckNegatives.push({ val: 100, rolls: 30 });
+                        stats.cdrNegatives.push({ val: 1500, rolls: 30 });
+                        logMessage("💀 Corruption: Luck 0% and +1.5s CD for 30 rolls!");
+                        break;
+                }
+            }
+        }
+
+        if (stats.permafrost > 0) stats.permafrost--;
+        else if (equipped.left === 'academyOfCryosis') {
+            stats.frost += 2;
+        }
+        if (equipped.right === 'eternalFreezingDevice') {
+            stats.frost += 1;
+        }
+        if (stats.frost >= 250) {
+            stats.frost = 0;
+            stats.permafrost = 5;
+            // Roll 2 frost buffs
+            for (let i = 0; i < 2; i++) {
+                let buff = Math.floor(Math.random() * 7) + 1;
+                switch (buff) {
+                    case 1:
+                        stats.multipliers.push({ mult: 10, rolls: 5 });
+                        logMessage("❄️ Frost: 10x Luck for 5 rolls!");
+                        break;
+                    case 2:
+                        stats.multipliers.push({ mult: 5, rolls: 5 });
+                        logMessage("❄️ Frost: 5x Luck for 5 rolls!");
+                        break;
+                    case 3:
+                        stats.multipliers.push({ mult: 3, rolls: 5 });
+                        logMessage("❄️ Frost: 3x Luck for 5 rolls!");
+                        break;
+                    case 4:
+                        stats.multipliers.push({ mult: 2, rolls: 5 });
+                        logMessage("❄️ Frost: 2x Luck for 5 rolls!");
+                        break;
+                    case 5:
+                        stats.multipliers.push({ mult: 1.5, rolls: 5 });
+                        logMessage("❄️ Frost: 1.5x Luck for 5 rolls!");
+                        break;
+                    case 6:
+                        stats.additives.push({ val: 500, rolls: 5 });
+                        logMessage("❄️ Frost: +500% Luck for 5 rolls!");
+                        break;
+                    case 7:
+                        stats.additives.push({ val: 300, rolls: 5 });
+                        logMessage("❄️ Frost: +300% Luck for 5 rolls!");
+                        break;
+                }
+            }
+            logMessage("<span class='highlight'>❄️ Permafrost Activated!</span>");
+        }
+
+
+
+        if (totalRolls % 5 === 0) {
+            if (equipped.left === 'metalMiner') {
+                let rand = Math.random() * 100;
+                let selected;
+                if (rand < 50) selected = 'iron';
+                else if (rand < 80) selected = 'copper';
+                else if (rand < 105) selected = 'silver';
+                else selected = 'goldOre';
+                materials[selected] += 1;
+                let metalNames = { iron: 'Iron', copper: 'Copper', silver: 'Silver', goldOre: 'Gold Ore' };
+                logMessage(`🔨 Metal Miner bonus: +1 ${metalNames[selected]}!`);
+            } else if (equipped.left === 'geoMiner') {
+                materials.topaz += 1;
+                logMessage("🔨 Geo Miner bonus: +1 Topaz!");
+            } else if (equipped.left === 'woodChopper') {
+                materials.wood += 1;
+                logMessage("🔨 Wood Chopper bonus: +1 Wood!");
+            }
+        }
+
+        if (equipped.left === 'runeOfTheEverlasting') {
+            stats.runeCounter++;
+            if (stats.runeCounter >= 100) {
+                stats.runeCounter = 0;
+                let r = Math.random() * 100;
+                let drops = [
+                    { id: 'commonRune', w: 50 }, { id: 'uncommonRune', w: 30 }, { id: 'rareRune', w: 10 },
+                    { id: 'epicRune', w: 9.5 }, { id: 'legendaryRune', w: 0.49 }, { id: 'mythicRune', w: 0.01 }
+                ];
+                let cw = 0, selected = drops[0];
+                for (let d of drops) { cw += d.w; if (r <= cw) { selected = d; break; } }
+                materials[selected.id]++;
+                logMessage(`🔮 Everlasting Rune generated 1x <span class="${runeEffects[selected.id].class}">${runeEffects[selected.id].name}</span>!`);
+            }
+        }
+
+        if (materials.fullyChargedRune > 0 && totalRolls % 500 === 0) {
+            let r = Math.random() * 100;
+            let drops = [
+                { id: 'commonRune', w: 30 }, { id: 'uncommonRune', w: 35 }, { id: 'rareRune', w: 25 },
+                { id: 'epicRune', w: 5 }, { id: 'legendaryRune', w: 3 }, { id: 'mythicRune', w: 1.75 }, { id: 'exaltedRune', w: 1.25 }
+            ];
+            let cw = 0, selected = drops[0];
+            for (let d of drops) { cw += d.w; if (r <= cw) { selected = d; break; } }
+            materials[selected.id]++;
+            logMessage(`🔮 Fully Charged Rune generated 1x <span class="${runeEffects[selected.id].class}">${runeEffects[selected.id].name}</span>!`);
+        }
+    }
+
+    function consumeSLuck() {
+        if (stats.sLuckRemainingRolls > 0) {
+            stats.sLuckRemainingRolls--;
+            if (stats.sLuckRemainingRolls <= 0) { stats.sLuckReady = 0; stats.sLuckBaseReady = 0; }
+            else { stats.sLuckReady = stats.sLuckBaseReady; }
+        }
+    }
+
+    function rollItem() {
+        if (isOnCooldown) return;
+        let rollData = calculateFinalRollStats();
+        if (stats.apexFreeRolls > 0) {
+            stats.apexFreeRolls--;
+            if (stats.forgottenActive > 0) {
+                if (attemptForgottenItemRoll()) {
+                    stats.forgottenActive = 0;
+                    consumeSLuck();
+                    updateUI(); saveGame();
+                    return;
+                }
+                stats.forgottenActive = 0;
+            }
+            if (attemptStaryPotionRoll()) {
+                consumeSLuck();
+                updateUI(); saveGame();
+                return;
+            }
+            let totalCalculatedLuck = rollData.finalLuck + stats.sLuckReady;
+            let allowedItems = baseLootTable;
+            if (equipped.left === 'geoMiner') {
+                allowedItems = baseLootTable.filter(item => ['gemstoneGeo', 'topaz', 'emerald', 'ruby', 'diamond', 'amethyst'].includes(item.id));
+            } else if (equipped.left === 'metalMiner') {
+                allowedItems = baseLootTable.filter(item => ['iron', 'goldOre', 'copper', 'silver'].includes(item.id));
+            } else if (equipped.left === 'woodChopper') {
+                allowedItems = baseLootTable.filter(item => ['wood', 'stone'].includes(item.id));
+            }
+            
+            let totalAllowedWeight = allowedItems.reduce((sum, item) => sum + item.weight, 0);
+            
+            let sortedLoot = allowedItems.slice().sort((a, b) => a.weight - b.weight);
+            let selected = null;
+            for (let item of sortedLoot) {
+                let baseProb = item.weight / totalAllowedWeight;
+                let luckMultiplier = (equipped.left === 'geoMiner' || equipped.left === 'metalMiner' || equipped.left === 'woodChopper') ? 1 : (1 + totalCalculatedLuck / 100);
+                let effectiveProb = baseProb * luckMultiplier;
+                if (Math.random() < effectiveProb) {
+                    selected = item;
+                    break;
+                }
+            }
+            if (!selected) {
+                selected = sortedLoot[sortedLoot.length - 1];
+            }
+
+            materials[selected.id]++;
+            let originalItem = baseLootTable.find(i => i.id === selected.id);
+            let rarity = getRarityFormat(originalItem.weight);
+            if (['divineSword', 'bloodFromTheAncientGod', 'featherOfTheArchangel', 'scytheFromTheBloodlust', 'apexStone'].includes(selected.id) || rarity.label === 'Exalted' || rarity.label === 'Glorious' || rarity.label === 'Transcendent') {
+                showCutscene(selected.id);
+            }
+            logMessage(`[FREE ROLL] Found 1x <span class="${rarity.class}">${selected.name}</span> (1/${rarity.chance})!`);
+            
+            if (stats.sLuckRemainingRolls > 0) consumeSLuck();
+            updateUI(); saveGame();
+            return;
+        }
+        totalRolls++;
+        if (totalRolls % 100 === 0) {
+            materials.megaPotionChest += 1;
+            materials.rarePotionChest += 5;
+            materials.potionChest += 5;
+            logMessage(`🎉 Milestone Reward: +1 Mega Potion Box, +5 Rare Potion Boxes, +5 Potion Boxes!`);
+        }
+        if (totalRolls >= 1000 && totalRolls % 100 === 0) {
+            let runeTypes = ['commonRune', 'uncommonRune', 'rareRune', 'epicRune', 'legendaryRune', 'mythicRune'];
+            let randomRune = runeTypes[Math.floor(Math.random() * runeTypes.length)];
+            materials[randomRune]++;
+            logMessage(`🔮 Bonus Rune: Obtained 1x <span class="${runeEffects[randomRune].class}">${runeEffects[randomRune].name}</span>!`);
+        }
+
+        if (materials.galaxy > 0 && totalRolls % 1000 === 0) {
+            let pick = Math.floor(Math.random() * 8) + 1;
+            switch (pick) {
+                case 1: materials.godlikePotion += 10; logMessage('🌌 Galaxy Winds: +10 Godlike Potions!'); break;
+                case 2: materials.heavenlyPotion += 20; logMessage('🌌 Galaxy Winds: +20 Heavenly Potions!'); break;
+                case 3: materials.sealedPotion += 30; logMessage('🌌 Galaxy Winds: +30 Sealed Potions!'); break;
+                case 4: materials.staryPotion = (materials.staryPotion || 0) + 1; logMessage('🌌 Galaxy Winds: +1 Stary Potion!'); break;
+                case 5: materials.forgottenPotion += 3; logMessage('🌌 Galaxy Winds: +3 Forgotten Potions!'); break;
+                case 6: stats.permanentLuck += 2000; logMessage('🌌 Galaxy Winds: +2000% permanent Luck!'); break;
+                case 7: stats.permanentCdr += 300; logMessage('🌌 Galaxy Winds: -0.3s permanent CD!'); break;
+                case 8: stats.potionDurationPercentBonus += 0.01; logMessage('🌌 Galaxy Winds: +1% non-one-time potion duration (permanent)!'); break;
+            }
+        }
+        if (equipped.right === 'apexMech' && totalRolls % 500 === 0) {
+            for (let i = 0; i < 2; i++) {
+                applyApexBuff(Math.floor(Math.random() * 5) + 1);
+            }
+        }
+        rollData = calculateFinalRollStats();
+        let totalCalculatedLuck = rollData.finalLuck + stats.sLuckReady;
+        if (stats.forgottenActive > 0) {
+            if (attemptForgottenItemRoll()) {
+                stats.forgottenActive = 0;
+                consumeSLuck();
+                processRollTick();
+                updateUI();
+                startCooldown(rollData.finalCdr, rollData.currentMinCD);
+                saveGame();
+                return;
+            }
+            stats.forgottenActive = 0;
+        }
+
+        if (attemptStaryPotionRoll()) {
+            consumeSLuck();
+            processRollTick();
+            updateUI();
+            startCooldown(rollData.finalCdr, rollData.currentMinCD);
+            saveGame();
+            return;
+        }
+
+        let sortedLoot = baseLootTable.slice().sort((a, b) => a.weight - b.weight); // rarest first
+        let selected = null;
+        for (let item of sortedLoot) {
+            let tm = 1;
+            if (equipped.left === 'geoMiner') { if (item.id === 'gemstoneGeo') tm = 5; if (item.id === 'stone') tm = 10; } 
+            else if (equipped.left === 'metalMiner') { if (['iron', 'goldOre', 'copper', 'silver'].includes(item.id)) tm = 2; } 
+            else if (equipped.left === 'woodChopper') { if (item.id === 'wood') tm = 10; }
+            let baseProb = item.weight / baseTotalWeight;
+            let effectiveProb = baseProb * tm * (1 + totalCalculatedLuck / 100);
+            if (Math.random() < effectiveProb) {
+                selected = item;
+                break;
+            }
+        }
+        if (!selected) {
+            // If none hit (unlikely), select the most common
+            selected = sortedLoot[sortedLoot.length - 1];
+        }
+
+        materials[selected.id]++;
+        let originalItem = baseLootTable.find(i => i.id === selected.id);
+        let rarity = getRarityFormat(originalItem.weight);
+
+        if (stats.abyssSlayerAwakened && selected.id === 'swordOfTheAbyss' && stats.trueAbyssSlayerStacks < 10) {
+            stats.trueAbyssSlayerStacks++;
+            switch (stats.trueAbyssSlayerStacks) {
+                case 1: materials.forgottenPotion += 10; logMessage('🔥 True Abyss Slayer: +10 Forgotten Potions!'); break;
+                case 2: stats.permanentLuck += 1000; stats.permanentCdr += 300; stats.potionDurationPercentBonus += 0.10; logMessage('🔥 True Abyss Slayer: +1000% Luck, -0.3s CD, non-sluck potions +10% duration!'); break;
+                case 3: stats.permanentLuck += 2000; stats.permanentCdr += 500; stats.sealedPotionExtraRolls += 1; logMessage('🔥 True Abyss Slayer: +2000% Luck, -0.5s CD, Sealed Potion lasts 1 roll longer!'); break;
+                case 4: stats.trueAbyssSlayerLuckMultiplier += 0.5; stats.permanentCdr += 300; logMessage('🔥 True Abyss Slayer: +0.5x luck multiplier, -0.3s CD!'); break;
+                case 5: stats.permanentLuck += 5000; stats.trueAbyssSlayerLuckMultiplier += 0.3; stats.permanentCdr += 500; stats.heavenlyPotionExtraRolls += 1; logMessage('🔥 True Abyss Slayer: +5000% Luck, +0.3x multiplier, -0.5s CD, Heavenly Potion lasts 1 roll longer!'); break;
+                case 6: stats.permanentCdr += 1000; stats.allowSluckStacking = true; logMessage('🔥 True Abyss Slayer: -1s CD, Heavenly stacks with Sealed!'); break;
+                case 7: stats.permanentLuck += 5000; stats.trueAbyssSlayerLuckMultiplier += 1.0; logMessage('🔥 True Abyss Slayer: +5000% Luck, +1x luck multiplier!'); break;
+                case 8: stats.permanentLuck += 5000; stats.permanentCdr += 500; stats.godlikePotionExtraRolls += 1; logMessage('🔥 True Abyss Slayer: +5000% Luck, -0.5s CD, Godlike Potion lasts 1 roll longer!'); break;
+                case 9: stats.potionDurationPercentBonus += 0.50; logMessage('🔥 True Abyss Slayer: All non-one-time potions +50% duration!'); break;
+                case 10: stats.permanentLuck += 10000; stats.trueAbyssSlayerLuckMultiplier += 2.0; stats.permanentCdr += 1000; stats.godlikeStacking = true; stats.heavenlyAndSealedStacking = true; logMessage('🔥 True Abyss Slayer: +10000% Luck, +2x multiplier, -1s CD, Godlike stacks with Heavenly and Sealed!'); break;
+            }
+        }
+
+        // Earn P currency based on rarity
+        let pEarn = 0;
+        if (rarity.label === 'Common') pEarn = 0;
+        else if (rarity.label === 'Uncommon') pEarn = 0.01;
+        else if (rarity.label === 'Rare') pEarn = 0.03;
+        else if (rarity.label === 'Epic') pEarn = 0.1;
+        else if (rarity.label === 'Legendary') pEarn = 0.3;
+        else if (rarity.label === 'Mythic') pEarn = 1;
+        else if (rarity.label === 'Exalted') pEarn = 10;
+        else if (rarity.label === 'Glorious') pEarn = 100;
+        else if (rarity.label === 'Transcendent') pEarn = 1000;
+        materials.P += pEarn;
+        
+        if (['divineSword', 'bloodFromTheAncientGod', 'featherOfTheArchangel', 'scytheFromTheBloodlust', 'apexStone'].includes(selected.id) || rarity.label === 'Exalted' || rarity.label === 'Glorious' || rarity.label === 'Transcendent') {
+            showCutscene(selected.id);
+        }
+        logMessage(`[<span class="${rarity.class}">${rarity.label}</span>] Roll #${totalRolls}: Found 1x <span class="${rarity.class}">${selected.name}</span> (1/${rarity.chance})!`);
+        
+        if (stats.sLuckRemainingRolls > 0) {
+            stats.sLuckRemainingRolls--; 
+            if (stats.sLuckRemainingRolls <= 0) { stats.sLuckReady = 0; stats.sLuckBaseReady = 0; }
+            else { stats.sLuckReady = stats.sLuckBaseReady; }
+        }
+        
+        processRollTick(); updateUI(); startCooldown(rollData.finalCdr, rollData.currentMinCD); saveGame();
+    }
+
+    function toggleAutoRoll() {
+        isAutoRolling = !isAutoRolling;
+        const btn = document.getElementById('autoRollBtn');
+        btn.style.backgroundColor = isAutoRolling ? '#f44336' : '#673ab7';
+        btn.innerText = isAutoRolling ? '⏹️ Stop Auto-Roll' : '🔄 Enable Auto-Roll';
+        if (isAutoRolling && !isOnCooldown) rollItem();
+    }
+
+    function startCooldown(cdrStat, minCD) {
+        isOnCooldown = true;
+        const btn = document.getElementById('rollBtn');
+        const cdText = document.getElementById('cooldownText');
+        btn.disabled = true;
+
+        let currentCooldown = Math.max(minCD, baseCooldown - cdrStat);
+        let timeLeft = currentCooldown;
+
+        autoRollTimer = setInterval(() => {
+            timeLeft -= (minCD === 20 ? 20 : 100); 
+            if (timeLeft <= 0) {
+                clearInterval(autoRollTimer); isOnCooldown = false; btn.disabled = false;
+                cdText.innerText = "Ready!";
+                if (isAutoRolling) setTimeout(rollItem, minCD === 20 ? 10 : 50);
+            } else {
+                cdText.innerText = `CD: ${(timeLeft/1000).toFixed(2)}s`;
+            }
+        }, minCD === 20 ? 20 : 100);
+    }
+
+    function updateUI() {
+        let current = calculateFinalRollStats();
+        
+        document.getElementById('luckStat').innerText = current.finalLuck.toFixed(0);
+        document.getElementById('overflowStat').innerText = current.overflowText;
+        document.getElementById('sLuckStat').innerText = stats.sLuckReady > 0 ? ` (+${stats.sLuckReady}% S*Luck Prime)` : '';
+        document.getElementById('cdrStat').innerText = (Math.max(current.currentMinCD, baseCooldown - current.finalCdr) / 1000).toFixed(2);
+        document.getElementById('rollCounter').innerText = totalRolls;
+
+        document.getElementById('equipLeft').innerHTML = equipped.left ? `${recipes[equipped.left].name} <button class="unequip-btn" onclick="unequip('left')">X</button>` : 'None';
+        document.getElementById('equipRight').innerHTML = equipped.right ? `${recipes[equipped.right].name} <button class="unequip-btn" onclick="unequip('right')">X</button>` : 'None';
+
+        document.getElementById('skipExalted').checked = skipCutsceneExalted;
+        document.getElementById('skipGlorious').checked = skipCutsceneGlorious;
+        document.getElementById('skipTranscendent').checked = skipCutsceneTranscendent;
+
+        let showStacks = (equipped.left === 'academyOfCryosis' || equipped.left === 'theGreatMonarch' || equipped.left === 'runeOfTheEverlasting' || materials.runeOfLife > 0 || equipped.left === 'northernLightSigil' || equipped.left === 'oblivionWarding' || materials.abyssSlayer > 0 || stats.abyssSlayerStacks > 0 || stats.trueAbyssSlayerStacks > 0);
+        document.getElementById('stackUI').style.display = showStacks ? 'block' : 'none';
+        document.getElementById('frostStacks').innerText = `❄️ Frost: ${stats.frost}/250`;
+        document.getElementById('corruptionStacks').innerText = `💀 Corruption: ${stats.corruption}/1000`;
+        document.getElementById('runeStacks').innerText = `🔮 Rune Energy: ${stats.runeCounter}/100`;
+        document.getElementById('lifeStacks').innerText = `💚 Life: ${stats.lifeStacks}/20000`;
+        document.getElementById('eternalGuidanceStacks').innerText = `✨ Eternal Guidance: ${stats.eternalGuidance}/100000`;
+        document.getElementById('theAbyssStacks').innerText = `🌑 The Abyss: ${stats.theAbyss}/5000`;
+        document.getElementById('abyssSlayerStacks').innerText = `🗡️ Abyss Slayer: ${stats.abyssSlayerStacks}/12500`;
+        document.getElementById('trueAbyssSlayerStacks').innerText = `🌌 True Abyss Slayer: ${stats.trueAbyssSlayerStacks}/10`;
+        let buffsHtml = '';
+        if (stats.curse3Timer > 0) buffsHtml += `<div class='curse'>💀 Base Luck = 1 (${stats.curse3Timer} rolls)</div>`;
+        stats.multipliers.forEach((m, i) => buffsHtml += `<div style="color:${i===0?'#ffeb3b':'#888'}">✨ ${m.mult}x Luck (${m.rolls} rolls) ${i!==0?'(Paused)':''}</div>`);
+        stats.additives.forEach(a => buffsHtml += `<div class="${a.val < 0 ? 'curse' : 'highlight'}">${a.val > 0 ? '+' : ''}${a.val}% Luck (${a.rolls} rolls)</div>`);
+        stats.activePotions.forEach(p => buffsHtml += `<div style="color:#00e5ff">🧪 ${p.name} (${Math.ceil((p.expiresAt - Date.now())/1000)}s)</div>`);
+        
+        document.getElementById('buffPanel').style.display = buffsHtml ? 'block' : 'none';
+        document.getElementById('buffList').innerHTML = buffsHtml;
+
+        document.getElementById('autoRollBtn').style.display = hasAutoRoller ? 'block' : 'none';
+        document.getElementById('toolsUI').style.display = materials.pickaxe > 0 ? 'block' : 'none';
+        document.getElementById('smelterUI').style.display = hasSmelter ? 'block' : 'none';
+
+        let chestHtml = '';
+        if (materials.potionChest > 0) chestHtml += `<button onclick="openChest('potionChest')">Open Potion Chest (${materials.potionChest})</button>`;
+        if (materials.rarePotionChest > 0) chestHtml += `<button onclick="openChest('rarePotionChest')">Open Rare Chest (${materials.rarePotionChest})</button>`;
+        if (materials.megaPotionChest > 0) chestHtml += `<button style="background-color: #9c27b0" onclick="openChest('megaPotionChest')">Open MEGA Chest (${materials.megaPotionChest})</button>`;
+        if (materials.elementPotionChest > 0) chestHtml += `<button onclick="openChest('elementPotionChest')">Open Element Potion Chest (${materials.elementPotionChest})</button>`;
+        if (materials.potionChest > 0 || materials.rarePotionChest > 0 || materials.megaPotionChest > 0 || materials.elementPotionChest > 0) {
+            chestHtml += `<button style="background-color: #ff9800; margin-top: 10px;" onclick="openAllChests()">Open All Chests</button>`;
+        }
+        document.getElementById('chestUI').innerHTML = chestHtml || '<em>No chests available.</em>';
+
+        let potionHtml = '';
+        Object.keys(potionEffects).forEach(id => { if (materials[id] > 0) potionHtml += `<div>${potionEffects[id].name} x${materials[id]} <button class="use-btn" onclick="usePotion('${id}')">Use</button></div>`; });
+        Object.keys(runeEffects).forEach(id => { if (materials[id] > 0) potionHtml += `<div><span class="${runeEffects[id].class}">${runeEffects[id].name}</span> x${materials[id]} <button class="use-btn" style="background:#673ab7" onclick="useRune('${id}')">Force Roll</button></div>`; });
+        document.getElementById('potionUI').innerHTML = potionHtml;
+
+        const invList = document.getElementById('inventoryList'); invList.innerHTML = '';
+        if (inventoryTab === 'special') {
+            for (let [item, count] of Object.entries(specialItems)) {
+                if (count > 0) {
+                    let fName = item.replace(/([A-Z])/g, ' $1').trim(); fName = fName.charAt(0).toUpperCase() + fName.slice(1);
+                    invList.innerHTML += `<li class="r-collectable"><span>${fName}</span> <strong>${count}</strong></li>`;
+                }
+            }
+            if (!Object.values(specialItems).some(c => c > 0)) {
+                invList.innerHTML = '<em>No special collectables yet.</em>';
+            }
+        } else if (inventoryTab === 'shop') {
+            invList.innerHTML = `<div style="color:#00e5ff; margin-bottom:10px;"><strong>💰 P Currency: ${materials.P.toFixed(2)}</strong></div>`;
+            const shopItems = [
+                { name: '(Lucky Potion + Speedy Potion) x30', price: 5, reward: { luckyPotion: 30, speedyPotion: 30 } },
+                { name: '(Haste I + Fortune I) x30', price: 7, reward: { hasteyPotionI: 30, fortunePotionI: 30 } },
+                { name: '(Haste II + Fortune II) x15', price: 10, reward: { hasteyPotionII: 15, fortunePotionII: 15 } },
+                { name: '(Haste III + Fortune III) x5', price: 15, reward: { hasteyPotionIII: 5, fortunePotionIII: 5 } },
+                { name: '(Super Fortune I + Super Speed I) x5', price: 20, reward: { superFortunePotionI: 5, superSpeedPotionI: 5 } },
+                { name: '(Super Fortune II + Super Speed II) x5', price: 25, reward: { superFortunePotionII: 5, superSpeedPotionII: 5 } },
+                { name: 'Supreme Potion x3', price: 30, reward: { supremePotion: 3 } },
+                { name: 'Small Potion Bundle', price: 15, bundle: 'small' },
+                { name: 'Medium Potion Bundle', price: 30, bundle: 'medium' },
+                { name: 'Large Potion Bundle', price: 75, bundle: 'large' },
+                { name: 'Mega Potion Bundle', price: 150, bundle: 'mega' },
+                { name: 'Point Potion', price: 10, reward: { pointPotion: 1 } }
+            ];
+            shopItems.forEach(item => {
+                invList.innerHTML += `<li style="justify-content: space-between;"><span>${item.name}</span> <button class="use-btn" onclick="buyShopItem('${item.name}', ${item.price}, '${item.bundle || ''}')">Buy ${item.price}P</button></li>`;
+            });
+        } else {
+            invList.innerHTML += `<div style="color:#ffeb3b; margin-bottom:10px;"><strong>💰 P Currency: ${materials.P.toFixed(2)}</strong></div>`;
+            for (let [item, count] of Object.entries(materials)) {
+                if (count > 0 && !potionEffects[item] && !runeEffects[item] && !['potionChest','rarePotionChest','megaPotionChest','elementPotionChest','P'].includes(item)) {
+                    let fName = item.replace(/([A-Z])/g, ' $1').trim(); fName = fName.charAt(0).toUpperCase() + fName.slice(1);
+                    let wObj = baseLootTable.find(x => x.id === item);
+                    let styling = wObj ? getRarityFormat(wObj.weight).class : '';
+                    invList.innerHTML += `<li class="${styling}"><span>${fName}</span> <strong>${count}</strong></li>`;
+                }
+            }
+            if (invList.innerHTML === '') invList.innerHTML = '<em>No materials available.</em>';
+        }
+
+        const gearUI = document.getElementById('gearInventory'); gearUI.innerHTML = '';
+        let displayCounts = {}; gearInventory.forEach(g => displayCounts[g] = (displayCounts[g] || 0) + 1);
+        for (let [gearId, count] of Object.entries(displayCounts)) {
+            const gear = recipes[gearId];
+            gearUI.innerHTML += `<div class="gear-item"><strong>${gear.name} x${count}</strong> (${gear.type})<br><small>${gear.desc}</small><br><button class="equip-btn" onclick="equip('${gearId}', '${gear.type}')">Equip</button></div>`;
+        }
+
+        renderCraftingUI();
+    }
+
+    function setInventoryTab(tab) {
+        inventoryTab = tab;
+        if (tab === 'special') document.getElementById('inventoryTitle').innerText = 'Special Collectables';
+        else if (tab === 'shop') document.getElementById('inventoryTitle').innerText = 'Potion Shop';
+        else document.getElementById('inventoryTitle').innerText = 'Materials Inventory';
+        updateUI();
+    }
+
+    function renderCraftingUI() {
+        const craftList = document.getElementById('craftingList'); craftList.innerHTML = '';
+        for (let [id, reqs] of Object.entries(recipes)) {
+            if (id === 'smelter' && hasSmelter) continue; if (id === 'autoRoller' && hasAutoRoller) continue;
+            if (id === 'luminousShard' && materials.luminousShard >= 6) continue;
+            if (id === 'heatwave' && materials.heatwave >= 5) continue;
+            if (id === 'runeOfLife' && materials.runeOfLife >= 4) continue;
+            if (id === 'fullyChargedRune' && materials.fullyChargedRune >= 1) continue;
+            if (id === 'abyssSlayer' && materials.abyssSlayer >= 3) continue;
+            if (id === 'galaxy' && materials.galaxy >= 1) continue;
+            let costText = Object.entries(reqs.cost).map(([k, v]) => { let name = recipes[k] ? recipes[k].name : k.replace(/([A-Z])/g, ' $1').trim(); return `${v} ${name.charAt(0).toUpperCase() + name.slice(1)}`; }).join(', ');
+            craftList.innerHTML += `<div style="margin-bottom: 10px; border-bottom: 1px dashed #555; padding-bottom: 10px;"><button onclick="craft('${id}')">Craft ${reqs.name}</button><br><small><strong>Cost:</strong> ${costText}</small><br><small><strong>Effect:</strong> ${reqs.desc}</small></div>`;
+        }
+    }
+
+    
+    function crackGeo() {
+        if (materials.gemstoneGeo > 0 && materials.pickaxe > 0) {
+            materials.gemstoneGeo--;
+            materials.pickaxe--; // This deducts the pickaxe
+            let drops = [{id: 'topaz', w: 50}, {id: 'emerald', w: 30}, {id: 'ruby', w: 10}, {id: 'diamond', w: 5}, {id: 'amethyst', w: 2}];
+            let tw = drops.reduce((s, d) => s + d.w, 0); let r = Math.random() * tw; let cw = 0; let result = drops[0];
+            for (let d of drops) { cw += d.w; if (r <= cw) { result = d; break; } }
+            materials[result.id]++; logMessage(`⛏️ Cracked a Geo! Found 1x <span class="highlight">${result.id}</span>.`);
+            updateUI(); saveGame();
+        } else {
+            logMessage("❌ You need 1 Gemstone Geo and 1 Pickaxe to do this!");
+        }
+    }
+    
+
+    function craft(recipeId) {
+        let recipe = recipes[recipeId]; let canCraft = true; let missing = [];
+        for (let [mat, qty] of Object.entries(recipe.cost)) {
+            if (recipes[mat] && (recipes[mat].type === 'left' || recipes[mat].type === 'right')) {
+                let eqQty = ((equipped.left === mat) ? 1 : 0) + ((equipped.right === mat) ? 1 : 0);
+                let invQty = gearInventory.filter(g => g === mat).length;
+                if ((eqQty + invQty) < qty) { canCraft = false; missing.push(`${qty} ${recipes[mat].name}`); }
+            } else { 
+                if ((materials[mat] || 0) < qty) { canCraft = false; missing.push(`${qty} ${mat.replace(/([A-Z])/g, ' $1').trim()}`); }
+            }
+        }
+
+        if (canCraft) {
+            for (let [mat, qty] of Object.entries(recipe.cost)) {
+                if (recipes[mat] && (recipes[mat].type === 'left' || recipes[mat].type === 'right')) {
+                    let needed = qty;
+                    while (needed > 0) {
+                        let idx = gearInventory.indexOf(mat);
+                        if (idx > -1) { gearInventory.splice(idx, 1); needed--; }
+                        else if (equipped.left === mat) { equipped.left = null; needed--; }
+                        else if (equipped.right === mat) { equipped.right = null; needed--; }
+                    }
+                } else { materials[mat] -= qty; }
+            }
+            
+            // --- Custom Crafting Logic ---
+            if (recipe.type === 'left' || recipe.type === 'right') { 
+                gearInventory.push(recipeId); logMessage(`🔨 Crafted Gear: <span class="highlight">${recipe.name}</span>`); 
+            } else if (recipeId === 'smelter') { 
+                hasSmelter = true; logMessage("🔥 Smelter built!"); 
+            } else if (recipeId === 'autoRoller') { 
+                hasAutoRoller = true; logMessage("🔄 Auto-Roller installed!"); 
+            } else if (recipeId === 'megaChestGamble') {
+                // The 50/50 Gamble Logic
+                if (Math.random() < 0.5) {
+                    materials.megaPotionChest++;
+                    logMessage(`🎲 Gamble Success! Crafted 1x <span style="color:#9c27b0; font-weight:bold;">Mega Potion Chest</span>`);
+                } else {
+                    materials.rarePotionChest += 3;
+                    logMessage(`🎲 Gamble Failed! Crafted 3x <span style="color:#2196f3; font-weight:bold;">Rare Potion Chest</span>`);
+                }
+            } else { 
+                materials[recipeId]++; logMessage(`🔨 Crafted Item: <span class="highlight">${recipe.name}</span>`); 
+            }
+            updateUI(); saveGame();
+        } else { logMessage(`❌ Cannot craft ${recipe.name}: Missing ${missing.join(', ')}.`); }
+    }
+
+    function smeltGold() { if (materials.goldOre >= 1) { materials.goldOre--; materials.goldBar++; updateUI(); saveGame(); } }
+    function equip(gearId, type) { if (equipped[type]) gearInventory.push(equipped[type]); gearInventory.splice(gearInventory.indexOf(gearId), 1); equipped[type] = gearId; updateUI(); saveGame(); }
+    function unequip(type) { if (equipped[type]) { gearInventory.push(equipped[type]); equipped[type] = null; updateUI(); saveGame(); } }
+    function saveGame(manual = false) { localStorage.setItem('rngCrafterV7', JSON.stringify({ materials, gearInventory, equipped, hasSmelter, hasAutoRoller, totalRolls, stats, specialItems, inventoryTab, skipCutsceneExalted, skipCutsceneGlorious, skipCutsceneTranscendent })); if (manual) logMessage("💾 Game saved!"); }
+    function loadGame() {
+        const saved = localStorage.getItem('rngCrafterV7');
+        if (saved) { const data = JSON.parse(saved); materials = { ...materials, ...data.materials }; gearInventory = data.gearInventory || []; equipped = data.equipped || { left: null, right: null }; hasSmelter = data.hasSmelter || false; hasAutoRoller = data.hasAutoRoller || false; totalRolls = data.totalRolls || 0; if (data.stats) { stats = { ...stats, ...data.stats }; } specialItems = data.specialItems || specialItems; inventoryTab = data.inventoryTab || inventoryTab; skipCutsceneExalted = data.skipCutsceneExalted || false; skipCutsceneGlorious = data.skipCutsceneGlorious || false; skipCutsceneTranscendent = data.skipCutsceneTranscendent || false; }
+        updateUI();
+    }
+    function wipeSave() { if (confirm("Delete all progress? This cannot be undone.")) { localStorage.removeItem('rngCrafterV7'); location.reload(); } }
+
+    setInterval(cleanupPotions, 1000); loadGame();
+</script>
+</body>
+</html>
