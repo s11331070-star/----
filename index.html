@@ -321,7 +321,8 @@
         northernLightSigil: { name: 'Northern Light Sigil', type: 'left', luck: 5000, cdr: 2000, cost: { northernLight: 1, essenceOfEternalFrost: 10, pieceOfCryosis:5 }, desc: '+5000% Luck, -2.0s CD' },
         oblivionWarding: { name: 'Oblivion Warding', type: 'left', luck: 15000, cdr: 3500, cost: { oblivion: 1, unknownOrb: 15, essenceOfUnderworld: 10 }, desc: '+15000% Luck, -3.5s CD' },
         abyssSlayer: { name: 'Abyss Slayer', type: 'material', cost: { swordOfTheAbyss: 1, abyssCore: 5, pieceOfTheEverlastingFlame: 3, abyssOrb: 10, corruptedFragment: 3 }, desc: '+2000% Luck and -0.6s CD; grants Abyss Slayer stacks each roll.' },
-        galaxy: { name: 'Galaxy', type: 'material', cost: { starscourge: 1, singularity: 1, permafrost: 3, runeOfLife: 1 }, desc: 'Every 1000 rolls picks a random Stary reward.' }
+        galaxy: { name: 'Galaxy', type: 'material', cost: { starscourge: 1, singularity: 1, permafrost: 3, runeOfLife: 1 }, desc: 'Every 1000 rolls picks a random Stary reward.' },
+        //starDevour: { name: 'Star Devour', type: 'material', cost: { starscourge: 1, singularity: 1, permafrost: 3, runeOfLife: 1 }, desc: 'Every 1000 rolls picks a random Star reward.' },
     };
 
     function getRarityFormat(weight) {
@@ -817,14 +818,24 @@
         }
 
         if (materials.abyssSlayer > 0) {
-            stats.abyssSlayerStacks = Math.min(stats.abyssSlayerStacks + 1, 12500);
+            if (stats.abyssSlayerStacks > 12500) stats.abyssSlayerStacks = 12500;
+            if (materials.abyssSlayer = 1){
+                stats.abyssSlayerStacks = Math.min(stats.abyssSlayerStacks + 1, 12500);
+            }
+            if (materials.abyssSlayer = 2){
+                stats.abyssSlayerStacks = Math.min(stats.abyssSlayerStacks + 2, 12500);
+            }
+            if (materials.abyssSlayer >= 3){
+                stats.abyssSlayerStacks = Math.min(stats.abyssSlayerStacks + 3, 12500);
+            }
             if (stats.abyssSlayerStacks === 500) { materials.forgottenPotion += 1; stats.permanentCdr += 100; logMessage('🗡️ Abyss Slayer: +1 Forgotten Potion, -0.1s CD!'); }
             if (stats.abyssSlayerStacks === 1000) { materials.forgottenPotion += 1; stats.permanentCdr += 300; logMessage('🗡️ Abyss Slayer: +1 Forgotten Potion, -0.3s CD!'); }
             if (stats.abyssSlayerStacks === 2000) { materials.forgottenPotion += 2; stats.permanentCdr += 500; stats.permanentLuck += 500; logMessage('🗡️ Abyss Slayer: +2 Forgotten Potions, -0.5s CD, +500% Luck!'); }
             if (stats.abyssSlayerStacks === 3500) { materials.forgottenPotion += 4; stats.permanentCdr += 500; stats.permanentLuck += 1000; logMessage('🗡️ Abyss Slayer: +4 Forgotten Potions, -0.5s CD, +1000% Luck!'); }
             if (stats.abyssSlayerStacks === 5000) { materials.forgottenPotion += 5; stats.permanentLuck += 2500; stats.abyssSlayerMultiplier *= 1.01; logMessage('🗡️ Abyss Slayer: +5 Forgotten Potions, +2500% Luck, +1% final Luck!'); }
             if (stats.abyssSlayerStacks === 10000) { stats.permanentLuck += 3500; stats.permanentCdr += 1000; stats.abyssSlayerMultiplier *= 1.01; logMessage('🗡️ Abyss Slayer: +3500% Luck, -1s CD, +1% final Luck!'); }
-            if (stats.abyssSlayerStacks === 12500) { stats.abyssSlayerAwakened = true; logMessage('🌌 Abyss Slayer Awakened! True Abyss Slayer stacks unlocked.'); }
+            if(stats.abyssSlayerAwakened=false){
+            if (stats.abyssSlayerStacks === 12500) { stats.abyssSlayerAwakened = true; logMessage('🌌 Abyss Slayer Awakened! True Abyss Slayer stacks unlocked.'); }}
         }
 
         if (equipped.left === 'oblivionWarding') {
