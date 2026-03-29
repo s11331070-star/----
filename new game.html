@@ -1,0 +1,2421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Incremental Power RPG - Loot Update</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #12121a; color: #eee; text-align: center; margin: 0; padding: 10px; font-size: 14px; }
+        .container { max-width: 1000px; margin: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .panel { background: #1f1f2e; padding: 15px; border-radius: 8px; border: 1px solid #444; }
+        .full-width { grid-column: span 2; }
+        button { background: #4CAF50; color: white; border: none; padding: 8px 12px; margin: 3px; border-radius: 4px; cursor: pointer; transition: 0.2s; font-weight:bold; }
+        button:hover { background: #45a049; }
+        button:disabled { background: #444; color: #888; cursor: not-allowed; }
+        .action-btn { background: #ff5722; font-size: 18px; padding: 12px 20px; }
+        .action-btn:hover { background: #e64a19; }
+        #log { height: 160px; overflow-y: auto; background: #0a0a0f; padding: 10px; text-align: left; font-family: monospace; font-size: 13px; border-radius: 5px; }
+        .log-entry { margin: 2px 0; border-bottom: 1px solid #222; padding-bottom: 2px; }
+        .loot-text { color: #00e5ff; font-weight: bold; } .boss-loot-text { color: #ffeb3b; font-weight: bold; }
+        .relic-text { color: #ff00ff; font-weight: bold; } .boss-text { color: #ff5252; font-weight: bold; }
+        .damage-text { color: #ff8a80; } .heal-text { color: #69f0ae; } .card-text { color: #ff9800; font-weight: bold; }
+        .tab-bar { margin-bottom: 15px; display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
+        .tab-btn { background: #333; font-size: 15px; padding: 10px 15px; }
+        .tab-btn.active { background: #2196f3; }
+        .tab-content { display: none; } .tab-content.active { display: block; }
+        .inv-item { background: #2a2a3a; padding: 8px; margin: 4px 0; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #555; }
+        .equipped-slot { background: #111; padding: 8px; margin-bottom: 5px; border: 1px dashed #00e5ff; }
+        .r-common { color: #b0bec5; } .r-uncommon { color: #69f0ae; } .r-rare { color: #40c4ff; } .r-legendary { color: #ffd740; }
+        .tree-item { background: #3a2044; padding: 10px; margin: 5px 0; border: 1px solid #9c27b0; border-radius: 5px; text-align: left; display:flex; justify-content: space-between; align-items: center;}
+        .tree-item div { max-width: 70%; } .tree-item h3 { margin: 0 0 5px 0; font-size: 15px; } .tree-item p { margin: 0; font-size: 12px; color:#ccc;}
+        .locked-item { opacity: 0.4; pointer-events: none; filter: grayscale(100%); }
+        .bar-bg { background: #333; border-radius: 5px; width: 100%; height: 15px; margin: 5px 0; overflow: hidden; border: 1px solid #555; }
+        .hp-player { background: #4CAF50; height: 100%; transition: width 0.2s ease-out; }
+        .hp-enemy { background: #f44336; height: 100%; transition: width 0.2s ease-out; }
+        .wheel-container { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 20px 0; position: relative; }
+        .wheel-slot { background: #1a1a2a; padding: 12px; border-radius: 4px; border-left: 4px solid #ffeb3b; min-height: 80px; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: 11px; text-align: center; transition: all 0.1s ease; position: relative; }
+        .wheel-slot.highlight { background: #4CAF50; border-left: 4px solid #ffff00; box-shadow: 0 0 20px #ffff00; transform: scale(1.05); }
+        @keyframes wheelSpin { 0% { } 100% { } }
+    </style>
+</head>
+<body>
+
+    <h1>Power Clicker RPG <span id="saveIndicator" style="font-size: 12px; color: #888;"></span></h1>
+    <div style="margin-bottom: 10px;">
+        <button onclick="saveGame()" style="background:#2196f3;">💾 Force Save</button>
+        <button onclick="hardReset()" style="background:#f44336;">⚠️ Hard Reset</button>
+    </div>
+
+    <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('combat')">⚔️ Combat</button>
+        <button class="tab-btn" onclick="switchTab('inventory')">🎒 Gear</button>
+        <button class="tab-btn" onclick="switchTab('rings')">💍Rings</button>
+        <button class="tab-btn" onclick="switchTab('cards')" id="tabBtnCards" style="display:none;">🃏 Cards</button>
+        <button class="tab-btn" onclick="switchTab('relics')">🏺 Relics</button>
+        <button class="tab-btn" onclick="switchTab('prestige')">✨ Prestige</button>
+        <button class="tab-btn" onclick="switchTab('wheel')" id="tabBtnWheel" style="display:none;">🎡 Wheel</button>
+        <button class="tab-btn" onclick="switchTab('wheel2')" id="tabBtnWheel2" style="display:none;">🎡 Wheel 2</button>
+        <button class="tab-btn" onclick="switchTab('settings')">⚙️ Settings</button>
+        
+    </div>
+    
+    <div id="settings" class="panel full-width" style="display:none;">
+        <h2>⚙️ Game Settings</h2>
+    
+        <div id="autoScrapSettings" style="background: #2a2a35; padding: 15px; border-radius: 5px; border: 1px solid #555; margin-top: 15px;"></div>
+    </div>
+    <div id="tab-combat" class="tab-content active container">
+        <div class="panel">
+            <h2>Player Stats</h2>
+            <p style="margin-bottom: 2px;"><strong>HP:</strong> <span id="playerHpDisplay">100</span> / <span id="playerMaxHpDisplay">100</span></p>
+            <div class="bar-bg"><div id="playerHpBar" class="hp-player" style="width: 100%;"></div></div>
+            <p><strong>Attack:</strong> <span id="attackDisplay">0</span></p>
+            <p><strong>Power:</strong> <span id="powerDisplay" style="color:#ffeb3b; font-weight:bold;">1</span></p>
+            <p><strong>Coins:</strong> <span id="coinDisplay">0</span></p>
+            <p><strong>Gems:</strong> <span id="gemDisplay" style="color:#00e5ff; font-weight:bold;">0</span></p>
+            
+            
+            <div style="font-size:12px; color:#aaa; margin-top:10px;">
+                Crit: <span id="statCrit">0</span>% (<span id="statCritDmg">0</span>x Dmg) | Super Crit: <span id="statSCrit">0</span>% (<span id="statSCritDmg">0</span>x Dmg)<br>
+                Pierce: <span id="statPierce">0</span>% (3.5x Dmg) | Dodge: <span id="statDodge">0</span>%<br>
+                Lifesteal: <span id="statDrain">0</span>% | Thorns: <span id="statThorns">0</span>%<br>
+                DR: <span id="statDr">0</span>% | Death Defy: <span id="statDefy">0</span>%<br>
+                Regen: <span id="statRegen">0</span>% | Luck: <span id="statLuck">0</span>x | Gold Mult: <span id="statGoldMult">0</span>x
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2><span id="zoneDisplay">The Castle</span></h2>
+            <h3>Stage <span id="stageDisplay">1</span> <span id="bossIndicator" class="boss-text"></span></h3>
+            <p style="margin-bottom: 2px;"><strong>Enemy HP:</strong> <span id="enemyHpDisplay">10</span> / <span id="enemyMaxHpDisplay">10</span></p>
+            <div class="bar-bg"><div id="enemyHpBar" class="hp-enemy" style="width: 100%;"></div></div>
+            <button class="action-btn" onclick="fightEnemy()" style="margin-top: 10px;">Attack Enemy</button>
+            <button onclick="toggleAutoAttack()" id="autoAttackBtn" style="margin-top: 10px; background: #4CAF50;">🔄 Auto Attack (OFF)</button>
+            <br><br>
+            <button onclick="changeStage(-1)">⬅ Prev</button>
+            <button onclick="changeStage(1)">Next ➡</button>
+        </div>
+
+        <div class="panel full-width">
+            <button class="action-btn" onclick="gainPower()" style="background: #2196f3;">⚡ Click Power (+<span id="clickValueDisplay">1</span>)</button>
+            <button onclick="buyUpgrade()">Upgrade Click (<span id="upgradeCostDisplay">10</span> Coins)</button>
+            <button onclick="buyMaxUpgrade()">Buy Max Upgrades</button>
+            <button class="action-btn" id="prestigeBtn" style="background: #9c27b0; display:none;" onclick="doPrestige()">✨ PRESTIGE</button>
+        </div>
+
+        <div class="panel full-width">
+            <h3>Adventure Log</h3>
+            <div id="log"></div>
+        </div>
+    </div>
+
+    <div id="tab-inventory" class="tab-content container">
+        <div class="panel full-width">
+            <h2>Equipped Gear</h2>
+            <div class="equipped-slot"><strong>Weapon:</strong> <span id="eqWeapon">None</span></div>
+            <div class="equipped-slot"><strong>Armor:</strong> <span id="eqArmor">None</span></div>
+        </div>
+        <div class="panel full-width" style="max-height: 350px; overflow-y: auto;">
+            <h2>Armory (Drops from Enemies) <button onclick="autoEquipBest()" style="float: right; font-size: 12px; padding: 5px 10px;">Auto Use Best</button></h2>
+            <div id="inventoryList"></div>
+        </div>
+    </div>
+    <div id="tab-rings" class="tab-content container">
+    <div class="panel full-width">
+        <h2>Ring Crafting</h2>
+        
+        
+        <div style="font-size: 13px; color: #bbb; background: #2a2a3a; padding: 10px; border-radius: 5px; margin-bottom: 15px; text-align: left;">
+            <strong>💍 Type Odds:</strong> Attack 45% | Defense 45% | Ability 9% | Special 1%<br>
+            <strong>🔹 T1 Rarity:</strong> Common 80% | Uncom 15% | Rare 4% | Epic 1%<br>
+            <strong>🔹 T2 Rarity:</strong> Common 20% | Uncom 50% | Rare 20% | Epic 9% | Leg 1%<br>
+            <strong>🔹 T3 Rarity:</strong> Uncom 10% | Rare 50% | Epic 30% | Leg 9% | Myth 1%<br>
+            <strong>🔹 T4 Rarity:</strong> Rare 20% | Epic 55% | Leg 15% | Myth 10%
+        </div>
+            
+            <div class="equipped-slot"><strong>Ring:</strong> <span id="eqRing">None</span></div>
+            <div style="display: flex; gap: 5px; margin: 5px 0;"><button onclick="craftRing(1)">Craft T1 (1k)</button> <button onclick="craftRing(1, true)" style="background: #ff6b9d;" id="vouchBtn-t1" style="display:none;">Free (Vouch)</button></div>
+            <div style="display: flex; gap: 5px; margin: 5px 0;"><button onclick="craftRing(2)" style="background: #0288d1;">Craft T2 (1m)</button> <button onclick="craftRing(2, true)" style="background: #ff6b9d;" id="vouchBtn-t2" style="display:none;">Free (Vouch)</button></div>
+            <div style="display: flex; gap: 5px; margin: 5px 0;"><button onclick="craftRing(3)" style="background: #7b1fa2;">Craft T3 (1b)</button> <button onclick="craftRing(3, true)" style="background: #ff6b9d;" id="vouchBtn-t3" style="display:none;">Free (Vouch)</button></div>
+            <div style="display: flex; gap: 5px; margin: 5px 0;"><button onclick="craftRing(4)" style="background: #ff8f00;">Craft T4 (1t)</button> <button onclick="craftRing(4, true)" style="background: #ff6b9d;" id="vouchBtn-t4" style="display:none;">Free (Vouch)</button></div>
+        </div>
+        <div class="panel full-width" style="max-height: 350px; overflow-y: auto;"><div id="ringList"></div></div>
+    </div>
+    <div id="tab-cards" class="tab-content container">
+        <div class="panel full-width">
+            <h2>Card Deck</h2>
+            <p style="color:#00e5ff;"><strong>Gems:</strong> <span id="cardGemDisplay">0</span></p>
+            <button onclick="buyCard()" class="action-btn" style="background:#ff9800;">Draw Card (10 Gems)</button>
+            <button onclick="buyCardSlot()" id="btnBuySlot" style="background:#00bcd4;">Buy Slot (<span id="slotCostDisplay">20</span> Gems)</button>
+            <p>Slots Used: <span id="slotsUsed">0</span> / <span id="slotsMax">1</span></p>
+        </div>
+        <div class="panel full-width" style="max-height: 350px; overflow-y: auto;"><div id="cardList"><em>No cards yet.</em></div></div>
+    </div>
+    <div id="tab-relics" class="tab-content container">
+        <div class="panel full-width">
+            <h2>Relic Collection</h2>
+            <div id="relicList" style="text-align:left; display:grid; grid-template-columns: 1fr 1fr; gap:10px;"></div>
+        </div>
+    </div>
+    <div id="tab-prestige" class="tab-content container">
+        <div class="panel full-width">
+            <h2>Prestige Tree</h2>
+            <button onclick="reincarnate()" style="background: #9c27b0; font-size: 16px; margin-bottom: 15px; width: 100%;">🌀 Reincarnate (Req: Stage 100+)</button>
+            <div class="panel full-width" style="border: 2px solid #9c27b0; margin-top: 15px;">
+        <h2 style="color: #e1bee7;">Reincarnation Upgrades (P: <span id="pDisplay">0</span>)</h2>
+        
+        <div style="font-size: 13px; color: #ddd; background: #2a2a3a; padding: 10px; border-radius: 5px; margin-bottom: 15px; text-align: left; line-height: 1.6;">
+            <strong>🏆 Milestones:</strong><br>
+            <span id="rm1">[1 Reinc]: 50% off T3/T4 Rings, +1 Prestige Token, 1.25x DMG, 1.5x HP</span><br>
+            <span id="rm2">[2 Reinc]: 80% off T2/T3/T4, 1.5x Card Luck, 3x DMG, 5x HP, +5% DR, 2x Gem Drop</span><br>
+            <span id="rm3">[3 Reinc]: 95% off T3/T4 Rings, 2x Coin, 7x DMG, 15x HP, +8% Crit, 1.25x Crit DMG, +2% SuperCrit, 3x SuperCrit DMG, 3x Pierce DMG</span>
+        </div>
+        
+        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+            <button onclick="buyRUpg('goldRush')" style="background: #ffb300; color: #000;">Gold Rusher (1P)<br><small>Random 0.5-10x Gold, +7% Dodge<br>30% +1 Token</small><br>Lv.<span id="rlvl_goldRush">0</span></button>
+            <button onclick="buyRUpg('brutalHit')" style="background: #d32f2f;">Brutal Hitter (1P)<br><small>5x DMG, +7% Crit, +1% SCrit<br>+3% Pierce</small><br>Lv.<span id="rlvl_brutalHit">0</span></button>
+            <button onclick="buyRUpg('absTank')" style="background: #1976d2;">Absolute Tank (1P)<br><small>10x HP, +15% DR<br>+0.5% Lifesteal</small><br>Lv.<span id="rlvl_absTank">0</span></button>
+        </div>
+    </div>
+            <p style="color: #ff00ff; font-size: 18px;"><strong>Tokens:</strong> <span id="tokenDisplay">0</span></p>
+            <div id="prestigeList"></div>
+        </div>
+    </div>
+
+    <div id="tab-wheel" class="tab-content container">
+        <div class="panel full-width">
+            <h2>🎡 Prestige Wheel</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div style="font-size: 16px;">
+                    <strong>Tickets:</strong> <span id="wheelTickets" style="color: #ffeb3b; font-weight: bold;">0</span><br>
+                    <small style="color: #aaa;">Progress: <span id="wheelProgress">0/100</span> stages</small>
+                </div>
+                <button onclick="spinWheel()" id="spinBtn" style="background: #ff6b9d; font-size: 18px; padding: 15px 30px; width: 200px;">🎡 SPIN (1 Ticket)</button>
+                <div id="wheelRewards" style="text-align: left; color: #69f0ae; font-size: 14px;">
+                    <small><strong>Recent Wins:</strong></small><br>
+                    <div id="recentRewards" style="max-height: 100px; overflow-y: auto; font-size: 12px;"></div>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px; margin-top: 20px;">
+                <div style="background: #2a2a3a; padding: 15px; border-radius: 5px;">
+                    <h3 style="margin-top: 0;">Vouchers</h3>
+                    <p>T1 Ring: <span id="vouchT1" style="color: #69f0ae; font-weight: bold;">0</span></p>
+                    <p>T2 Ring: <span id="vouchT2" style="color: #40c4ff; font-weight: bold;">0</span></p>
+                    <p>T3 Ring: <span id="vouchT3" style="color: #ffd740; font-weight: bold;">0</span></p>
+                    <p>Prestige Upgrade: <span id="vouchPres" style="color: #ff00ff; font-weight: bold;">0</span></p>
+                    <hr style="border-color: #555; margin: 10px 0;">
+                    <p style="font-size: 12px; color: #aaa;">Stat Buffs (stackable):<br>
+                    ATK Buff: <span id="wheelAtkBuff" style="color: #ff8a80;">0%</span><br>
+                    HP Buff: <span id="wheelHpBuff" style="color: #69f0ae;">0%</span></p>
+                </div>
+                
+                <div style="background: #2a2a3a; padding: 15px; border-radius: 5px;">
+                    <h3 style="margin-top: 0; text-align: center;">🎡 Wheel</h3>
+                    <div id="wheelContainer" class="wheel-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tab-wheel2" class="tab-content container">
+        <div class="panel full-width">
+            <h2>🎡 Prestige Wheel 2</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div style="font-size: 16px;">
+                    <strong>T2 Tickets:</strong> <span id="wheelTickets2" style="color: #ffeb3b; font-weight: bold;">0</span>
+                </div>
+                <button onclick="spinWheel2()" id="spinBtn2" style="background: #ff6b9d; font-size: 18px; padding: 15px 30px; width: 200px;">🎡 SPIN (1 T2 Ticket)</button>
+                <div id="wheelRewards2" style="text-align: left; color: #69f0ae; font-size: 14px;">
+                    <small><strong>Recent Wins:</strong></small><br>
+                    <div id="recentRewards2" style="max-height: 100px; overflow-y: auto; font-size: 12px;"></div>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px; margin-top: 20px;">
+                <div style="background: #2a2a3a; padding: 15px; border-radius: 5px;">
+                    <h3 style="margin-top: 0;">Vouchers</h3>
+                    <p>T1 Ring: <span id="vouchT12" style="color: #69f0ae; font-weight: bold;">0</span></p>
+                    <p>T2 Ring: <span id="vouchT22" style="color: #40c4ff; font-weight: bold;">0</span></p>
+                    <p>T3 Ring: <span id="vouchT32" style="color: #ffd740; font-weight: bold;">0</span></p>
+                    <p>T4 Ring: <span id="vouchT42" style="color: #ff5722; font-weight: bold;">0</span></p>
+                    <p>Prestige Upgrade: <span id="vouchPres2" style="color: #ff00ff; font-weight: bold;">0</span></p>
+                    <hr style="border-color: #555; margin: 10px 0;">
+                    <p style="font-size: 12px; color: #aaa;">Stat Buffs (stackable):<br>
+                    ATK Buff: <span id="wheelAtkBuff2" style="color: #ff8a80;">0%</span><br>
+                    HP Buff: <span id="wheelHpBuff2" style="color: #69f0ae;">0%</span></p>
+                </div>
+                
+                <div style="background: #2a2a3a; padding: 15px; border-radius: 5px;">
+                    <h3 style="margin-top: 0; text-align: center;">🎡 Wheel 2</h3>
+                    <div id="wheelContainer2" class="wheel-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === 完整資料庫 ===
+        const FORMATTER = new Intl.NumberFormat('en-US', { notation: "compact", maximumFractionDigits: 1 });
+        const ZONE_NAMES = ["The Castle", "Whispering Woods", "Scorched Desert", "Frozen Peaks", "Abyssal Depths","Infernal Caldera","Astral Sanctuary","Realm of forgotten","Ethreal Plane","The Eternal Citadel", "Mythic Realm","LIMBO","Fractured Reality","Realm of the Ancients","Void Nexus","Eclipse Domain","Chrono Rift","Celestial Spire","Shadowfell","Arcane Labyrinth","Divine Palace"];
+                            //zone 1       zone 2              zone 3           zone 4          zone 5             zone 6           zone 7              zone 8             zone 9           zone 10               zone 11          zone 12        zone 13           zone 14                zone 15          zone 16      zone 17           zone 18         zone 19       zone 20,   zone 21
+        // 恢復完整的卡牌庫
+        const CARD_DEFS = [
+            { id: "c1", r: "common", name: "Sword", desc: "+25% Damage", stat: "dmg", val: 0.25, unq: false, weight: 50 },
+            { id: "c2", r: "common", name: "HP Tank", desc: "+25% Max HP", stat: "hp", val: 0.25, unq: false, weight: 50 },
+            { id: "c3", r: "common", name: "Armor", desc: "+1% Damage Reduction", stat: "dr", val: 1, unq: false, weight: 50 },
+            { id: "c4", r: "common", name: "Speedy", desc: "+0.2% Dodge Chance", stat: "dodge", val: 0.2, unq: false, weight: 50 },
+            { id: "c5", r: "uncommon", name: "Reforge", desc: "+25% HP & Dmg", stat: "hpdmg", val: 0.25, unq: false, weight: 35 },
+            { id: "c6", r: "uncommon", name: "*Absorbe", desc: "+1% DR, Heal 20% of blocked Dmg", stat: "absorb", val: 1, unq: true, weight: 35 },
+            { id: "c7", r: "uncommon", name: "Tank Armor", desc: "+3% DR", stat: "dr", val: 3, unq: false, weight: 35 },
+            { id: "c8", r: "uncommon", name: "Hasty", desc: "+0.5% Dodge", stat: "dodge", val: 0.5, unq: false, weight: 35 },
+            { id: "c9", r: "uncommon", name: "Sharpness", desc: "+50% Damage", stat: "dmg", val: 0.50, unq: false, weight: 35 },
+            { id: "c10", r: "uncommon", name: "Large HP Tank", desc: "+50% HP", stat: "hp", val: 0.50, unq: false, weight: 35 },
+            { id: "c11", r: "rare", name: "Thorn", desc: "Reflect 1% Dmg", stat: "thorns", val: 1, unq: false, weight: 10 },
+            { id: "c12", r: "rare", name: "Really Sharp", desc: "+125% Dmg", stat: "dmg", val: 1.25, unq: false, weight: 10 },
+            { id: "c13", r: "rare", name: "Mega HP Tank", desc: "+125% HP", stat: "hp", val: 1.25, unq: false, weight: 10 },
+            { id: "c14", r: "rare", name: "Magic Shield", desc: "+5% DR", stat: "dr", val: 5, unq: false, weight: 10 },
+            { id: "c15", r: "rare", name: "HP Regen", desc: "Heal 0.1% HP/hit", stat: "regen", val: 0.1, unq: false, weight: 10 },
+            { id: "c16", r: "rare", name: "Super Speed", desc: "+1% Dodge", stat: "dodge", val: 1, unq: false, weight: 10 },
+            { id: "c17", r: "rare", name: "*Small Crit", desc: "+5% Crit Chance", stat: "critCh", val: 5, unq: true, weight: 10 },
+            { id: "c18", r: "rare", name: "Small Crit Dmg", desc: "+50% Crit Dmg", stat: "critDmg", val: 0.5, unq: false, weight: 10 },
+            { id: "c19", r: "rare", name: "*Fortune", desc: "+5% Gold Drop", stat: "gold", val: 0.05, unq: true, weight: 10 },
+            { id: "c20", r: "legendary", name: "Lethal", desc: "+250% Dmg", stat: "dmg", val: 2.50, unq: false, weight: 5 },
+            { id: "c21", r: "legendary", name: "Extreme Tank", desc: "+250% HP", stat: "hp", val: 2.50, unq: false, weight: 5 },
+            { id: "c22", r: "legendary", name: "*Undying", desc: "+10% Death Defy", stat: "defy", val: 10, unq: true, weight: 5 },
+            { id: "c23", r: "legendary", name: "*Heavy Crit", desc: "+200% Crit Dmg", stat: "critDmg", val: 2.0, unq: true, weight: 5 },
+            { id: "c24", r: "legendary", name: "Steady Hand", desc: "+10% Crit Chance", stat: "critCh", val: 10, unq: false, weight: 5 },
+            { id: "c25", r: "legendary", name: "Light Speed", desc: "+3% Dodge", stat: "dodge", val: 3, unq: false, weight: 5 },
+            { id: "c26", r: "legendary", name: "*Gilded", desc: "+100% Gold", stat: "gold", val: 1.0, unq: true, weight: 5 },
+            { id: "c27", r: "legendary", name: "*Lucky", desc: "1.1x Luck", stat: "luck", val: 1.1, unq: true, weight: 5 }
+        ];
+        
+        const SLOT_COSTS = [10, 20, 30, 40, 50, 70, 100, 150, 200, 300];
+        
+        const RELIC_POOLS = [
+            [{id:"r11", n:"Castle Crown", s:"dmg", v:0.02, d:"+2% Dmg"}, {id:"r12", n:"Royal Seal", s:"gold", v:0.02, d:"+2% Gold"}, {id:"r13", n:"Knight Crest", s:"hp", v:0.02, d:"+2% HP"}],
+            [{id:"r21", n:"Wood Sprite", s:"dodge", v:1, d:"+1% Dodge"}, {id:"r22", n:"Bark Shield", s:"dr", v:1, d:"+1% DR"}, {id:"r23", n:"Hunter Mark", s:"critCh", v:1, d:"+1% Crit Ch."}],
+            [{id:"r31", n:"Desert Rose", s:"drain", v:0.5, d:"+0.5% Lifesteal"}, {id:"r32", n:"Sun Stone", s:"critDmg", v:0.05, d:"+5% Crit Dmg"}, {id:"r33", n:"Oasis Water", s:"regen", v:0.2, d:"+0.2% Regen"}],
+            [{id:"r41", n:"Frost Orb", s:"dr", v:2, d:"+2% DR"}, {id:"r42", n:"Yeti Fur", s:"hp", v:0.05, d:"+5% HP"}, {id:"r43", n:"Ice Shard", s:"thorns", v:3, d:"+3% Thorns"}],
+            // 【修復】這裡原本漏了一個逗號！
+            [{id:"r51", n:"Abyssal Pearl", s:"luck", v:0.05, d:"+5% Luck"}, {id:"r52", n:"Deep Anchor", s:"dmg", v:0.05, d:"+5% Dmg"}, {id:"r53", n:"Kraken Eye", s:"defy", v:2, d:"+2% Defy"}],
+            [{id:"r61", n:"Ember Core", s:"atkMulti", v:0.05, d:"+5% Attack Mult"}, {id:"r62", n:"Lava Scale", s:"hpMulti", v:0.05, d:"+5% HP Mult"}, {id:"r63", n:"Magma Heart", s:"clickMulti", v:0.05, d:"+5% Click Mult"}],
+            [{id:"r71", n:"Astral Shard", s:"allMulti", v:0.02, d:"+2% All Mult"}, {id:"r72", n:"Cosmic Dust", s:"gemMulti", v:0.1, d:"+10% Gem Drop"}, {id:"r73", n:"Nebula Core", s:"coinMulti", v:0.1, d:"+10% Coin Drop"}],
+            [{id:"r81", n:"Ethereal Essence", s:"hpMulti", v:0.1, d:"+10% HP Mult"}, {id:"r82", n:"Phantom Veil", s:"dmg", v:0.1, d:"+10% Dmg"}, {id:"r83", n:"Spectral Lantern", s:"dodge", v:2, d:"+2% Dodge"}],
+            // 【修復】這裡原本也漏了一個逗號！
+            [{id:"r91", n:"Citadel Banner", s:"atkMulti", v:0.1, d:"+10% Attack Mult"}, {id:"r92", n:"Eternal Flame", s:"clickMulti", v:0.1, d:"+10% Click Mult"}, {id:"r93", n:"Timeless Hourglass", s:"regen", v:0.5, d:"+0.5% Regen"}],
+            [{id:"r101", n:"Mythic Relic", s:"allMulti", v:0.05, d:"+5% All Mult"}],
+            //zone 11-14 的遺物
+            [{id:"r111", n:"LIMBO Shard", s:"allMulti", v:0.1, d:"+10% All Mult"}, {id:"r112", n:"Fractured Shard", s:"hpMulti", v:0.2, d:"+20% HP Mult"}, {id:"r113", n:"Ancient Shard", s:"dmg", v:0.2, d:"+20% Dmg"}],
+            [{id:"r121", n:"Void Shard", s:"atkMulti", v:0.2, d:"+20% Attack Mult"}, {id:"r122", n:"Eclipse Shard", s:"clickMulti", v:0.2, d:"+20% Click Mult"}, {id:"r123", n:"Chrono Shard", s:"regen", v:1, d:"+1% Regen"}],
+            [{id:"r131", n:"Celestial Shard", s:"allMulti", v:0.15, d:"+15% All Mult"}, {id:"r132", n:"Shadow Shard", s:"drain", v:1, d:"+1% Lifesteal"}, {id:"r133", n:"Arcane Shard", s:"critCh", v:5, d:"+5% Crit Chance"}],
+            [{id:"r141", n:"ancient Shard", s:"allMulti", v:0.25, d:"+25% All Mult"}, {id:"r142", n:"mossy Shard", s:"defy", v:5, d:"+5% Death Defy"}, {id:"r143", n:"crown of the ancients", s:"thorns", v:5, d:"+5% Thorns"}],
+            //zone 15-18 的遺物
+            [{id:"r151", n:"Eclipse Shard", s:"atkMulti", v:0.3, d:"+30% Attack Mult"}, {id:"r152", n:"Nexus Shard", s:"hpMulti", v:0.3, d:"+30% HP Mult"}, {id:"r153", n:"Rift Shard", s:"dmg", v:0.3, d:"+30% Dmg"}],
+            [{id:"r161", n:"Chrono Shard", s:"clickMulti", v:0.3, d:"+30% Click Mult"}, {id:"r162", n:"Spire Shard", s:"drain", v:2, d:"+2% Lifesteal"}, {id:"r163", n:"Shadow Shard", s:"dodge", v:5, d:"+5% Dodge"}],
+            [{id:"r171", n:"Mythic Shard", s:"allMulti", v:0.2, d:"+20% All Mult"}, {id:"r172", n:"Mythic Veil", s:"defy", v:10, d:"+10% Death Defy"}, {id:"r173", n:"Mythic Lantern", s:"thorns", v:10, d:"+10% Thorns"}],
+            [{id:"r181", n:"Eternal Shard", s:"allMulti", v:0.5, d:"+50% All Mult"}], //zone 19-20 的遺物
+            [{id:"r191", n:"arcane magic", s:"atkMulti", v:0.3, d:"+30% Attack Mult"}, {id:"r192", n:"Flame Shard", s:"hpMulti", v:0.3, d:"+30% HP Mult"}, {id:"r193", n:"Dodge Shard", s:"dodge", v:10, d:"+10% Dodge"}],
+            [{id:"r201", n:"True Relic", s:"allMulti", v:0.1, d:"+10% All Mult"}], //zone 20 的遺物
+            [{id:"r211", n:"Reincarnation Shard", s:"allMulti", v:0.5, d:"+50% All Mult"}, {id:"r212", n:"Token Shard", s:"defy", v:20, d:"+20% Death Defy"}, {id:"r213", n:"Prestige Shard", s:"atkMulti", v:0.5, d:"+50% Attack Mult"}] //zone 21 的遺物 
+        ];
+        
+        // 恢復完整的轉生技能樹說明
+        const P_CONFIG = {
+            atk: { n:"Titan's Grip", d:"+50% Dmg", unl:1, bCost:1, sStep:2, m:999 },
+            hp: { n:"Vitality Font", d:"+50% HP", unl:1, bCost:1, sStep:2, m:999 },
+            pwr: { n:"Energy Conduit", d:"+100% Click", unl:1, bCost:1, sStep:2, m:999 },
+            wheel:{n:"Prestige wheel",d:"a wheel that grant bonous stuff",unl:30,bCost:5,sStep:1,m:1},
+            coin: { n:"Coin Greed", d:"+75% Gold", unl:30, bCost:2, sStep:2, m:999 },
+            cards: { n:"Unlock Cards", d:"Unlocks Cards Tab & Gem Drops!", unl:30, bCost:10, sStep:1, m:1 },
+            // 【新增】Power Clicker 技能
+            powerClick: { n: "Power Clicker", d: "x1.25 Power Gain/Click", bCost: 8, sStep: 2, m: 999, unl: 40 },
+            critDmg: { n:"Critical Strike", d:"+1x Crit Dmg", unl:40, bCost:5, sStep:2, m:999 },
+            critChance: { n:"Critical Chance", d:"+5% Crit Chance", unl:40, bCost:10, sStep:3, m:16 },
+            poison:{ n:"Poison", d:"+3% to apply poison on hit", unl: 40, bCost:10, sStep:3, m:25},
+            ticketspeed:{ n:"Ticket Speed", d:"-5 stage requirement for ticket", unl:40, bCost:15, sStep:5, m:5 },
+            deathDefy: { n:"Death Defy", d:"+1% to ignore fatal blow", unl:50, bCost:10, sStep:5, m:20 },
+            drain: { n:"Drain", d:"+1% Lifesteal", unl:50, bCost:15, sStep:3, m:20 },
+            ringSlot: { n: "Extra Ring Slot", m: 9, unl: 50, d: "Adds +1 extra ring equip slot.", bCost: 50, sStep: 50 },
+            secondwheel:{ n:"Second Wheel", d:"unlock a second wheel", unl:50, bCost:30, sStep:1, m:1},
+            damagemuti:{ n:"Damage Multiplier", d:"1.2x DMG per level", unl:50, bCost:20, sStep:5, m:999},
+            hpmuti:{ n:"HP Multiplier", d:"1.35x HP per level", unl:50, bCost:20, sStep:5, m:999},
+            // 以下為新增的技能：
+            advanceticketspeed:{n:"Advanced Ticket Speed", d:"-10 stage requirement for ticket", unl:60, bCost:50, sStep:5, m:3},
+            pierce: { n: "Piercing Strikes", d: "+1% Pierce Chance (350% DMG + DoT)", bCost: 10, sStep: 2, m: 50, unl: 60 },
+            goldDig: { n: "Gold Digger", d: "x1.5 Gold Drop", bCost: 10, sStep: 5, m: 999, unl: 60 },
+            scChance: { n: "Super Crit Chance", d: "+1% Super Crit Chance (Base 5x)", bCost: 20, sStep: 2, m: 30, unl: 70 },
+            scDmg: { n: "Super Critical", d: "+2.5x Super Crit DMG", bCost: 15, sStep: 3, m: 999, unl: 70 },
+            enDot:{ n:"Enhance DoT",bCost: 50, sStep:1,m:1, unl:80,d:"Let DoT effects able to crit and super crit."},
+            execute: { n: "Execution", m: 20, unl: 100, d: "Instantly kills enemies below 0.5% Max HP per level.", bCost: 30, sStep: 5 },
+            bigdamagemuiti: { n: "Massive Damage Multiplier", d: "2x DMG per level", unl: 100, bCost: 50, sStep: 7, m: 999 },
+            bighpmuti: { n: "Massive HP Multiplier", d: "3x HP per level", unl: 100, bCost: 50, sStep: 7, m: 999 },
+            killstreak:{"n":"Kill Streak",d:"+15% damage per kill, lost on death.",unl:120,bCost:50,sStep:10,m:999},
+            instakill:{ n: "Instakill", d: "+0.1% chance to instantly kill non-boss enemies on hit.", unl: 130, bCost: 50, sStep: 10, m: 10},
+            bloodlust:{ n: "Bloodlust", d: "+1% life steal and 1.1x damage", unl: 140, bCost: 50, sStep: 20, m: 10},
+            lastbreath:{ n: "Last Breath", d: "+100% damage when below 20% hp, effect lost when hp is regenerate or die", unl: 150, bCost: 70, sStep: 20, m: 1 },
+            
+        };
+
+        const RING_CATEGORIES = [{ name: "Attack", chance: 45, statType: "atkMulti" }, { name: "Defense", chance: 45, statType: "hpMulti" }, { name: "Ability", chance: 9, statType: "clickMulti" }, { name: "Special", chance: 1, statType: "coinMulti" }];
+        const RING_RARITIES = [{ name: "Common", multi: 1 }, { name: "Uncommon", multi: 1.5 }, { name: "Rare", multi: 2 }, { name: "Epic", multi: 3 }, { name: "Legendary", multi: 5 }, { name: "Mythical", multi: 10 }];
+        const RARITY_CHANCES = [[80, 15, 4, 1, 0, 0], [20, 50, 20, 9, 1, 0], [0, 10, 50, 30, 9, 1], [0, 0, 20, 55, 15, 10]];
+        const QUALITY_RANGES = [ [0, 80], [20, 100], [50, 100], [90, 100] ];
+
+        // 【新增】分解與精煉的數值設定
+        const SCRAP_VALUES = { "Common": 10, "Uncommon": 25, "Rare": 50, "Epic": 125, "Legendary": 350, "Mythical": 1000 };
+        const REFINE_COSTS = { "Common": 5, "Uncommon": 10, "Rare": 20, "Epic": 45, "Legendary": 100, "Mythical": 275 };
+        const GEAR_POOLS = [
+            { normal: [{ name: "Wooden Sword", type: "weapon", stat: 2 }, { name: "Iron Sword", type: "weapon", stat: 5 }, { name: "Leather Armor", type: "armor", stat: 10 }, { name: "Iron Armor", type: "armor", stat: 25 }], boss: [{ name: "Gilded Blade", type: "weapon", stat: 30 }, { name: "Gilded Armor", type: "armor", stat: 150 }] },//zone 1
+            { normal: [{ name: "Bone Club", type: "weapon", stat: 20 }, { name: "Steel Axe", type: "weapon", stat: 50 }, { name: "Tattered Cloak", type: "armor", stat: 100 }, { name: "Chainmail", type: "armor", stat: 250 }], boss: [{ name: "Voidbringer", type: "weapon", stat: 300 }, { name: "Void Mantle", type: "armor", stat: 1500 }] },//zone2
+            { normal: [{ name: "Desert Spear", type: "weapon", stat: 250 }, { name: "Obsidian Dagger", type: "weapon", stat: 600 }, { name: "Sandcloth", type: "armor", stat: 1200 }, { name: "Bronze Plate", type: "armor", stat: 3000 }], boss: [{ name: "Pharaoh's Scepter", type: "weapon", stat: 4000 }, { name: "Pharaoh's Wraps", type: "armor", stat: 20000 }] },//zone 3
+            { normal: [{ name: "Ice Pick", type: "weapon", stat: 3000 }, { name: "Frostbite Axe", type: "weapon", stat: 8000 }, { name: "Fur Coat", type: "armor", stat: 15000 }, { name: "Ice Scale Armor", type: "armor", stat: 40000 }], boss: [{ name: "Winter's Howl", type: "weapon", stat: 60000 }, { name: "Heart of Ice", type: "armor", stat: 300000 }] },//zone 4
+            { normal: [{ name: "Abyssal Trident", type: "weapon", stat: 45000 }, { name: "Leviathan Fang", type: "weapon", stat: 120000 }, { name: "Diver's Suit", type: "armor", stat: 220000 }, { name: "Coral Armor", type: "armor", stat: 350000 }], boss: [{ name: "Kraken's Bane", type: "weapon", stat: 300000 }, { name: "Aegis of the Deep", type: "armor", stat: 500000 }] },//zone 5
+            { normal: [{ name: "Obsidian Blade", type: "weapon", stat: 150000 }, { name: "Magma Staff", type: "weapon", stat: 200000 },{ name: "Ashwood Bow", type: "weapon", stat: 500000 },{ name: "Ember Tunic", type: "armor", stat: 750000 }, { name: "Lava Forged Plate", type: "armor", stat: 700000 }, { name: "Cinder Robe", type: "armor", stat: 1000000 }],//zone 6
+            boss: [{ name: "Ignis Core Wand", type: "weapon", stat: 700000 },{ name: "Heart of the Caldera", type: "armor", stat: 2500000 }] },//zone 6 boss
+            
+            // Zone 7 裝備設定
+            { normal: [{ name: "Starforged Sword", type: "weapon", stat: 500000 }, { name: "Cosmic Scythe", type: "weapon", stat: 750000 }, { name: "Nebula Robe", type: "armor", stat: 2250000 }, { name: "Galactic Plate", type: "armor", stat: 4000000 }], 
+            // 【修復】這裡原本是 `}];`，我把它改成 `},` 讓陣列可以繼續往下延伸！
+            boss: [{ name: "Astral Edge", type: "weapon", stat: 2000000 }, { name: "Celestial Aegis", type: "armor", stat: 7000000 }] }, 
+            
+            // Zone 8 裝備設定
+            { normal: [{ name: "Ethereal Dagger", type: "weapon", stat: 1500000 }, { name: "Phantom Blade", type: "weapon", stat: 3000000 }, { name: "Spectral Shroud", type: "armor", stat: 1250000 }, { name: "Ghostly Plate", type: "armor", stat: 2000000 }],
+            // 【修復】這裡的結尾原本是 `};`，現在改成正確的陣列結尾 `} ];`
+            boss: [{ name: "Eternal Soul Reaper", type: "weapon", stat: 7000000 }, { name: "Citadel Guardian Armor", type: "armor", stat: 25000000 }] },
+            //zone 9 的裝備設定
+            { normal: [{ name: "Shadowfang", type: "weapon", stat: 5000000 }, { name: "Nightmare Staff", type: "weapon", stat: 12500000 }, { name: "Phantom Bow", type: "weapon", stat: 17500000 }, { name: "Shadow Robe", type: "armor", stat: 6000000 }, { name: "Nightmare Plate", type: "armor", stat: 10000000 }, { name: "Phantom Shield", type: "armor", stat: 12500000 }], 
+            boss: [{ name: "Shadow Reaper", type: "weapon", stat: 27000000 }, { name: "Dark Citadel Armor", type: "armor", stat: 35000000 }] },
+            //zone 10 的裝備設定
+                { normal: [{ name: "Arcane Wand", type: "weapon", stat: 20000000 }, { name: "Mystic Blade", type: "weapon", stat: 40000000 }, { name: "Enchanted Bow", type: "weapon", stat: 75000000 }, { name: "Arcane Robe", type: "armor", stat: 25000000 }, { name: "Mystic Plate", type: "armor", stat: 50000000 }, { name: "Enchanted Aegis", type: "armor", stat: 80000000 }],
+                boss: [{ name: "Arcane Overlord's Staff", type: "weapon", stat: 150000000 }, { name: "Overlord's Arcane Armor", type: "armor", stat: 250000000 }] },
+                //zone 11 的裝備設定
+                { normal: [{ name: "Timeless Sword", type: "weapon", stat: 125000000 }, { name: "Eternal Staff", type: "weapon", stat: 500000000 }, { name: "Ageless Bow", type: "weapon", stat: 750000000 }, { name: "Timeless Shroud", type: "armor", stat: 200000000 }, { name: "Eternal Plate", type: "armor", stat: 500000000 }, { name: "Ageless Aegis", type: "armor", stat: 850000000 }],
+                boss: [{ name: "Timeless Warlord's Blade", type: "weapon", stat: 150000000 }, { name: "Warlord's Timeless Aegis", type: "armor", stat: 2000000000 }] },
+                //zone 12 的裝備設定
+                { normal: [{ name: "Fractured Blade", type: "weapon", stat: 1200000000 }, { name: "Rift Staff", type: "weapon", stat: 3000000000 }, { name: "Shattered Bow", type: "weapon", stat: 7000000000 }, { name: "Fractured Shroud", type: "armor", stat: 1500000000 }, { name: "Rift Plate", type: "armor", stat: 4500000000 }, { name: "Shattered Aegis", type: "armor", stat: 8000000000 }], 
+            boss: [{ name: "Reality Breaker", type: "weapon", stat: 15000000000 }, { name: "Dimensional Guardian Armor", type: "armor", stat: 25000000000 }] },
+            
+            //zone 13 的裝備設定
+                { normal: [{ name: "Ancient Sword", type: "weapon", stat: 12500000000 }, { name: "Elder Staff", type: "weapon", stat: 40000000000 }, { name: "Prime Bow", type: "weapon", stat: 60000000000 }, { name: "Ancient Shroud", type: "armor", stat: 17500000000 }, { name: "Elder Plate", type: "armor", stat: 35000000000 }, { name: "Prime Aegis", type: "armor", stat: 85000000000 }], 
+                boss: [{ name: "Ancient Warlord's Blade", type: "weapon", stat: 200000000000 }, { name: "Warlord's Aegis", type: "armor", stat: 300000000000 }] },
+            //zone 14 的裝備設定
+                { normal: [{ name: "Mythic Sword", type: "weapon", stat: 130000000000 }, { name: "Mythic Staff", type: "weapon", stat: 500000000000 }, { name: "Mythic Bow", type: "weapon", stat: 700000000000 }, { name: "Mythic Shroud", type: "armor", stat: 250000000000 }, { name: "Mythic Plate", type: "armor", stat: 500000000000 }, { name: "Mythic Aegis", type: "armor", stat: 1000000000000 }], 
+                boss: [{ name: "Mythic Overlord's Blade", type: "weapon", stat: 2550000000000 }, { name: "Overlord's Aegis", type: "armor", stat: 4000000000000 }] },
+            //zone 15 的裝備設定
+                { normal: [{ name: "Eternal Sword", type: "weapon", stat: 1700000000000 }, { name: "Eternal Staff", type: "weapon", stat: 4000000000000 }, { name: "Eternal Bow", type: "weapon", stat: 6000000000000 }, { name: "Eternal Shroud", type: "armor", stat: 1500000000000 }, { name: "Eternal Plate", type: "armor", stat: 5000000000000 }, { name: "Eternal Aegis", type: "armor", stat: 7850000000000 }], 
+                boss: [{ name: "Eternal Emperor's Blade", type: "weapon", stat: 15000000000000 }, { name: "Emperor's Aegis", type: "armor", stat: 30000000000000 }] },
+            //zone 16 的裝備設定
+                { normal: [{ name: "True Sword", type: "weapon", stat: 10000000000000 }, { name: "True Staff", type: "weapon", stat: 45000000000000 }, { name: "True Bow", type: "weapon", stat: 70000000000000 }, { name: "True Shroud", type: "armor", stat: 25000000 }, { name: "True Plate", type: "armor", stat: 20000000000000 }, { name: "True Aegis", type: "armor", stat: 50000000000000 }], 
+                boss: [{ name: "True Emperor's Blade", type: "weapon", stat: 175000000000000 }, { name: "True Emperor's Aegis", type: "armor", stat: 200000000000000 }] },
+            //zone 17 的裝備設定
+                { normal: [{ name: "Ascended Sword", type: "weapon", stat: 100000000000000 }, { name: "Ascended Staff", type: "weapon", stat: 300000000000000 }, { name: "Ascended Bow", type: "weapon", stat: 650000000000000 }, { name: "Ascended Shroud", type: "armor", stat: 150000000000000 }, { name: "Ascended Plate", type: "armor", stat: 400000000000000 }, { name: "Ascended Aegis", type: "armor", stat: 750000000000000 }], 
+                boss: [{ name: "Ascended Emperor's Blade", type: "weapon", stat: 1250000000000000 }, { name: "Ascended Emperor's Aegis", type: "armor", stat: 3000000000000000 }] },
+            //zone 18 的裝備設定
+                { normal: [{ name: "Supreme Sword", type: "weapon", stat: 900000000000000 }, { name: "Supreme Staff", type: "weapon", stat: 2500000000000000 }, { name: "Supreme Bow", type: "weapon", stat: 5000000000000000 }, { name: "Supreme Shroud", type: "armor", stat: 1500000000000000 }, { name: "Supreme Plate", type: "armor", stat: 3000000000000000 }, { name: "Supreme Aegis", type: "armor", stat: 6500000000000000 }], 
+                boss: [{ name: "Supreme Emperor's Blade", type: "weapon", stat: 15000000000000000 }, { name: "Supreme Emperor's Aegis", type: "armor", stat: 20000000000000000 }] },
+            //zone 19 的裝備設定
+                { normal: [{ name: "Omni Sword", type: "weapon", stat: 8750000000000000 }, { name: "Omni Staff", type: "weapon", stat: 22500000000000000 }, { name: "Omni Bow", type: "weapon", stat: 67500000000000000 }, { name: "Omni Shroud", type: "armor", stat: 12500000000000000 }, { name: "Omni Plate", type: "armor", stat: 45000000000000000 }, { name: "Omni Aegis", type: "armor", stat: 90000000000000000 }], 
+                boss: [{ name: "Omni Emperor's Blade", type: "weapon", stat: 225000000000000000 }, { name: "Omni Emperor's Aegis", type: "armor", stat: 412350000000000000 }] },
+            //zone 20 的裝備設定 
+                { normal: [{ name: "Eternal Omni Sword", type: "weapon", stat: 112250000000000000 }, { name: "Eternal Omni Staff", type: "weapon", stat: 450000000000000000 }, { name: "Eternal Omni Bow", type: "weapon", stat: 1000000000000000000 }, { name: "Eternal Omni Shroud", type: "armor", stat: 202500000000000000 }, { name: "Eternal Omni Plate", type: "armor", stat: 500000000000000000 }, { name: "Eternal Omni Aegis", type: "armor", stat: 1000000000000000000 }], 
+                boss: [{ name: "Eternal Omni Emperor's Blade", type: "weapon", stat: 9999999999999999999 }, { name: "Eternal Omni Emperor's Aegis", type: "armor", stat: 9999999999999999999 }] }]
+        // === 遊戲狀態 (新增背包系統) ===
+        const defaultState = {
+            power: 1, clickCount: 0, coins: 0, gems: 0, scraps: 0, tokens: 0, stage: 1, maxStage: 1, histMaxStage: 1, maxStageEver: 1, highestGemBoss: 0, playerHp: 100,
+            inventory: {}, 
+            equipped: { weapon: null, armor: null, rings: [] }, // 【修改】將 ring 改為 rings 陣列
+            rings: [], cards: [], cardSlots: 1, relics: {},
+            autoScrap: {},
+            wheelTickets: 0, wheelTicketsT2: 0, wheelTicketsAwarded: 0, wheelVouchers: { t1: 0, t2: 0, t3: 0, t4: 0, pres: 0 }, wheelStats: { atkBuff: 0, hpBuff: 0 }, wheelProgressCumulative: 0,
+            killStreak: 0,
+            autoAttack: false,
+            tree: { atk: 0, hp: 0, pwr: 0, coin: 0, cards: 0,powerClick: 0, critDmg: 0, critChance: 0, deathDefy: 0, drain: 0 , pierce: 0, goldDig: 0, scChance: 0, scDmg: 0 ,execute: 0, ringSlot: 0,enDot:0,poison:0,wheel:0,ticketspeed:0,secondwheel:0,advanceticketspeed:0,damagemuti:0,hpmuti:0,instakill:0,bloodlust:0,lastbreath:0,killstreak:0,bighpmuti:0,bigdamagemuiti:0},
+            reincarnations: 0, prestigePoints: 0, rUpgrades: { goldRush: 0, brutalHit: 0, absTank: 0 }
+        };
+
+        let game = {}; let enemy = { hp: 10, max: 10, atk: 1, isBoss: false };
+        let autoAttackInterval = null;
+
+        function format(n) { return FORMATTER.format(n); }
+        function logMessage(msg, c = "") {
+            const l = document.getElementById("log");
+            l.innerHTML = `<div class="log-entry ${c}">[${new Date().toLocaleTimeString('en-US', {hour12:false})}] ${msg}</div>` + l.innerHTML;
+            if (l.children.length > 50) l.lastChild.remove();
+        }
+        function switchTab(tabId) {
+            // 確保包含所有的分頁 HTML ID
+            const allTabs = ['tab-combat', 'tab-inventory', 'tab-rings', 'tab-cards', 'tab-relics', 'tab-prestige', 'tab-wheel', 'tab-wheel2', 'settings']; 
+            
+            // 先把所有的分頁都隱藏起來
+            allTabs.forEach(t => {
+                const el = document.getElementById(t);
+                if (el) el.style.display = 'none';
+            });
+            
+            // 判斷目標分頁的正確 ID（除了 settings，其他都有 tab- 前綴）
+            const targetId = tabId === 'settings' ? 'settings' : 'tab-' + tabId;
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) targetEl.style.display = 'block';
+
+            // 如果切換到設定頁面，繪製自動分解表格
+            if (tabId === 'settings') {
+                renderAutoScrapUI();
+            }
+        }
+
+        // === 存檔與讀檔 (相容舊裝備系統的防錯機制) ===
+        function loadGame() {
+            const saved = localStorage.getItem("powerRPG_save");
+            if (saved) {
+                try {
+                    const p = JSON.parse(saved);
+                    game = { ...defaultState, ...p, equipped:{...defaultState.equipped, ...p.equipped}, tree:{...defaultState.tree, ...p.tree} };
+                    
+                    // 防止舊存檔崩潰 (把舊的裝備格式洗掉，轉為新的背包系統)
+                    if (!game.inventory || typeof game.equipped.weapon === 'object') {
+                        game.inventory = {};
+                        game.equipped.weapon = null;
+                        game.equipped.armor = null;
+                        logMessage("Migrated to new Inventory system. Gear reset.", "boss-loot-text");
+                    }
+                    
+                    // 輪盤系統初始化檢核
+                    if (!game.wheelTickets) game.wheelTickets = 0;
+                    if (!game.wheelTicketsAwarded) game.wheelTicketsAwarded = 0;
+                    if (!game.wheelVouchers) game.wheelVouchers = { t1: 0, t2: 0, t3: 0, t4: 0, pres: 0 };
+                    if (game.wheelVouchers.t1 == null) game.wheelVouchers.t1 = 0;
+                    if (game.wheelVouchers.t2 == null) game.wheelVouchers.t2 = 0;
+                    if (game.wheelVouchers.t3 == null) game.wheelVouchers.t3 = 0;
+                    if (game.wheelVouchers.t4 == null) game.wheelVouchers.t4 = 0;
+                    if (game.wheelVouchers.pres == null) game.wheelVouchers.pres = 0;
+                    if (!game.wheelStats) game.wheelStats = { atkBuff: 0, hpBuff: 0 };
+                    if (!game.wheelProgressCumulative) game.wheelProgressCumulative = 0;
+                    if (game.killStreak == null) game.killStreak = 0;
+                    
+                    // Ring lock migration + baseStat/tierBoost migration
+                    if (game.rings) {
+                        game.rings.forEach(r => {
+                            if (r.locked === undefined) r.locked = false;
+                            // Migrate old rings without baseStat/tierBoost
+                            if (r.baseStat === undefined || r.tierBoost === undefined) {
+                                r.tierBoost = (r.tier || 1) === 1 ? 1 : (r.tier || 1) === 2 ? 3 : (r.tier || 1) === 3 ? 10 : 100;
+                                // Estimate baseStat from current value: v = 1 + (baseStat * (q/100)) * tierBoost
+                                let quality = r.q || 0;
+                                if (quality > 0) {
+                                    r.baseStat = (r.v - 1) / ((quality / 100) * r.tierBoost);
+                                } else {
+                                    r.baseStat = 1; // Fallback for 0% quality rings
+                                }
+                            }
+                        });
+                    }
+                    
+                    logMessage("Game loaded successfully!", "heal-text");
+                } catch (e) { game = { ...defaultState }; }
+            } else { game = { ...defaultState }; logMessage("Welcome!"); }
+        }
+        function saveGame() { localStorage.setItem("powerRPG_save", JSON.stringify(game)); document.getElementById("saveIndicator").innerText = "(Saved)"; setTimeout(() => document.getElementById("saveIndicator").innerText = "", 2000); }
+        function hardReset() { if (confirm("Wipe everything?")) { localStorage.removeItem("powerRPG_save"); location.reload(); } }
+        setInterval(saveGame, 10000);
+
+        // === 輪盤系統 ===
+        const WHEEL_REWARDS = [
+            { name: "+1 Token", prob: 0.33, reward: () => { game.tokens += 1; } },
+            { name: "+1 T1 Vouch", prob: 0.40, reward: () => { game.wheelVouchers.t1 += 1; } },
+            { name: "+0.05% ATK", prob: 0.05, reward: () => { game.wheelStats.atkBuff += 0.05; } },
+            { name: "+0.05% HP", prob: 0.05, reward: () => { game.wheelStats.hpBuff += 0.05; } },
+            { name: "+5 Token", prob: 0.05, reward: () => { game.tokens += 5; } },
+            { name: "+1 T2 Vouch", prob: 0.10, reward: () => { game.wheelVouchers.t2 += 1; } },
+            { name: "+10 Token", prob: 0.02, reward: () => { game.tokens += 10; } },
+            { name: "+15 Token", prob: 0.007, reward: () => { game.tokens += 15; } },
+            { name: "+1 T3 Vouch", prob: 0.002, reward: () => { game.wheelVouchers.t3 += 1; } },
+            { name: "+1 Prestige Voucher", prob: 0.001, reward: () => { game.wheelVouchers.pres += 1; } }
+        ];
+        
+        const WHEEL2_REWARDS = [
+            { name: "+10 Token", prob: 0.34, reward: () => { game.tokens += 10; } },
+            { name: "+1 T2 Ring Vouch", prob: 0.34, reward: () => { game.wheelVouchers.t2 += 1; } },
+            { name: "+0.3% ATK", prob: 0.105, reward: () => { game.wheelStats.atkBuff += 0.3; } },
+            { name: "+0.3% HP", prob: 0.104, reward: () => { game.wheelStats.hpBuff += 0.3; } },
+            { name: "+25 Token", prob: 0.075, reward: () => { game.tokens += 25; } },
+            { name: "+1% ATK & HP", prob: 0.025, reward: () => { game.wheelStats.atkBuff += 1; game.wheelStats.hpBuff += 1; } },
+            { name: "+1 T3 Ring Vouch", prob: 0.008, reward: () => { game.wheelVouchers.t3 += 1; } },
+            { name: "+1 T4 Ring Vouch", prob: 0.003, reward: () => { game.wheelVouchers.t4 += 1; } }
+        ];
+
+        function spinWheel() {
+            if (game.wheelTickets < 1) { alert("Not enough tickets! (1 per 100 stages)"); return; }
+            
+            const spinBtn = document.getElementById("spinBtn");
+            spinBtn.disabled = true;
+            
+            game.wheelTickets--;
+            
+            // Define rewards, add T2 ticket if second wheel unlocked
+            let rewards = WHEEL_REWARDS.map(r => ({ ...r })); // clone to avoid mutating base pool
+            if (game.tree.secondwheel > 0) {
+                rewards.push({ name: "+1 T2 Ticket", prob: 0.10, reward: () => { game.wheelTicketsT2 += 1; } });
+                // Scale existing probabilities by 0.9
+                for (let i = 0; i < rewards.length - 1; i++) {
+                    rewards[i].prob *= 0.9;
+                }
+            }
+            
+            // Get current luck to boost better rewards
+            const stats = calcStats();
+            const luck = stats.luck;
+            
+            // Calculate luck-adjusted probabilities
+            const adjustedRewards = rewards.map((r, idx) => {
+                let tier = 1;
+                if (idx >= 5 && idx < rewards.length - 1) tier = 2; // T2 Vouch, +10 Token
+                if (idx >= 6 && idx < rewards.length - 1) tier = 2.5; // +10 Token
+                if (idx >= 7 && idx < rewards.length - 1) tier = 3; // +15 Token
+                if (idx >= 8 && idx < rewards.length - 1) tier = 4; // T3 Vouch
+                if (idx >= 9 && idx < rewards.length - 1) tier = 5; // Prestige Vouch
+                if (idx === rewards.length - 1 && game.tree.secondwheel > 0) tier = 3; // T2 Ticket
+                
+                // Boost probability by luck factor
+                let luckBoost = 1 + (luck - 1) * (tier - 1) * 0.15;
+                return r.prob * luckBoost;
+            });
+            
+            // Renormalize probabilities to sum to 1
+            const totalProb = adjustedRewards.reduce((a, b) => a + b, 0);
+            const normalizedProbs = adjustedRewards.map(p => p / totalProb);
+            
+            // Determine which reward the player wins
+            let rand = Math.random();
+            let cumProb = 0;
+            let winRewardIndex = 0;
+            for (let i = 0; i < normalizedProbs.length; i++) {
+                cumProb += normalizedProbs[i];
+                if (rand < cumProb) { winRewardIndex = i; break; }
+            }
+            
+            const winReward = rewards[winRewardIndex];
+            
+            // Spinning animation
+            let currentHighlight = 0;
+            let spinSpeed = 50; // ms per spin
+            let spins = 0;
+            const totalSpins = 20 + Math.floor(Math.random() * 10); // 20-30 spins
+            
+            function updateWheelHighlight(index) {
+                const slots = document.querySelectorAll('.wheel-slot');
+                slots.forEach((slot, i) => {
+                    if (i === index) {
+                        slot.classList.add('highlight');
+                    } else {
+                        slot.classList.remove('highlight');
+                    }
+                });
+            }
+            
+            const spinInterval = setInterval(() => {
+                updateWheelHighlight(currentHighlight);
+                currentHighlight = (currentHighlight + 1) % WHEEL_REWARDS.length;
+                spins++;
+                
+                // Slow down near the end
+                if (spins > totalSpins - 5) {
+                    spinSpeed = 100;
+                }
+                if (spins > totalSpins - 3) {
+                    spinSpeed = 200;
+                }
+                
+                // Stop at winner
+                if (spins > totalSpins) {
+                    clearInterval(spinInterval);
+                    updateWheelHighlight(winRewardIndex);
+                    
+                    // Award the prize after a short delay
+                    setTimeout(() => {
+                        winReward.reward();
+                        logMessage(`🎡 Wheel: ${winReward.name}!`, "boss-loot-text");
+                        
+                        // Add to recent rewards display
+                        const recentDiv = document.getElementById("recentRewards");
+                        const entry = document.createElement("div");
+                        entry.style.color = "#69f0ae";
+                        entry.textContent = `✓ ${winReward.name}`;
+                        recentDiv.insertBefore(entry, recentDiv.firstChild);
+                        if (recentDiv.children.length > 5) recentDiv.removeChild(recentDiv.lastChild);
+                        
+                        updateWheelDisplay();
+                        renderPrestige();
+                        updateUI();
+                        saveGame();
+                        spinBtn.disabled = false;
+                    }, 500);
+                }
+            }, spinSpeed);
+        }
+
+        function spinWheel2() {
+            if (game.wheelTicketsT2 < 1) { alert("Not enough T2 tickets!"); return; }
+            
+            const spinBtn2 = document.getElementById("spinBtn2");
+            spinBtn2.disabled = true;
+            
+            game.wheelTicketsT2--;
+            
+            // Determine which reward the player wins
+            let rand = Math.random();
+            let cumProb = 0;
+            let winRewardIndex = 0;
+            for (let i = 0; i < WHEEL2_REWARDS.length; i++) {
+                cumProb += WHEEL2_REWARDS[i].prob;
+                if (rand < cumProb) { winRewardIndex = i; break; }
+            }
+            
+            const winReward = WHEEL2_REWARDS[winRewardIndex];
+            
+            // Spinning animation
+            let currentHighlight = 0;
+            let spinSpeed = 50; // ms per spin
+            let spins = 0;
+            const totalSpins = 20 + Math.floor(Math.random() * 10); // 20-30 spins
+            
+            function updateWheel2Highlight(index) {
+                const slots = document.querySelectorAll('#wheelContainer2 .wheel-slot');
+                slots.forEach((slot, i) => {
+                    if (i === index) {
+                        slot.classList.add('highlight');
+                    } else {
+                        slot.classList.remove('highlight');
+                    }
+                });
+            }
+            
+            const spinInterval = setInterval(() => {
+                updateWheel2Highlight(currentHighlight);
+                currentHighlight = (currentHighlight + 1) % WHEEL2_REWARDS.length;
+                spins++;
+                
+                // Slow down near the end
+                if (spins > totalSpins - 5) {
+                    spinSpeed = 100;
+                }
+                if (spins > totalSpins - 3) {
+                    spinSpeed = 200;
+                }
+                
+                // Stop at winner
+                if (spins > totalSpins) {
+                    clearInterval(spinInterval);
+                    updateWheel2Highlight(winRewardIndex);
+                    
+                    // Award the prize after a short delay
+                    setTimeout(() => {
+                        winReward.reward();
+                        logMessage(`🎡 Wheel 2: ${winReward.name}!`, "boss-loot-text");
+                        
+                        // Add to recent rewards display
+                        const recentDiv = document.getElementById("recentRewards2");
+                        const entry = document.createElement("div");
+                        entry.style.color = "#69f0ae";
+                        entry.textContent = `✓ ${winReward.name}`;
+                        recentDiv.insertBefore(entry, recentDiv.firstChild);
+                        if (recentDiv.children.length > 5) recentDiv.removeChild(recentDiv.lastChild);
+                        
+                        updateWheel2Display();
+                        renderPrestige();
+                        updateUI();
+                        saveGame();
+                        spinBtn2.disabled = false;
+                    }, 500);
+                }
+            }, spinSpeed);
+        }
+
+        function renderWheelSlots() {
+            const container = document.getElementById("wheelContainer");
+            if (!container) return;
+            container.innerHTML = '';
+            
+            let rewards = WHEEL_REWARDS.map(r => ({ ...r })); // clone to avoid mutating base pool
+            if (game.tree.secondwheel > 0) {
+                rewards.push({ name: "+1 T2 Ticket", prob: 0.10 });
+                for (let i = 0; i < rewards.length - 1; i++) {
+                    rewards[i].prob *= 0.9;
+                }
+            }
+            
+            // Get current luck to show adjusted probabilities
+            const stats = calcStats();
+            const luck = stats.luck;
+            
+            // Calculate luck-adjusted probabilities like in spinWheel
+            const adjustedRewards = rewards.map((r, idx) => {
+                let tier = 1;
+                if (idx >= 5 && idx < rewards.length - 1) tier = 2; // T2 Vouch, +10 Token
+                if (idx >= 6 && idx < rewards.length - 1) tier = 2.5; // +10 Token
+                if (idx >= 7 && idx < rewards.length - 1) tier = 3; // +15 Token
+                if (idx >= 8 && idx < rewards.length - 1) tier = 4; // T3 Vouch
+                if (idx >= 9 && idx < rewards.length - 1) tier = 5; // Prestige Vouch
+                if (idx === rewards.length - 1 && game.tree.secondwheel > 0) tier = 3; // T2 Ticket
+                
+                // Boost probability by luck factor
+                let luckBoost = 1 + (luck - 1) * (tier - 1) * 0.15;
+                return r.prob * luckBoost;
+            });
+            
+            // Renormalize probabilities to sum to 1 and display
+            const totalProb = adjustedRewards.reduce((a, b) => a + b, 0);
+            const normalizedProbs = adjustedRewards.map(p => p / totalProb);
+            
+            rewards.forEach((reward, idx) => {
+                const slot = document.createElement('div');
+                slot.className = 'wheel-slot';
+                slot.innerHTML = `<strong>${reward.name}</strong><br><span style="color: #ffeb3b; font-weight: bold;">${(normalizedProbs[idx] * 100).toFixed(1)}%</span>`;
+                container.appendChild(slot);
+            });
+        }
+
+        function renderWheel2Slots() {
+            const container = document.getElementById("wheelContainer2");
+            if (!container) return;
+            container.innerHTML = '';
+            
+            // Get current luck to show adjusted probabilities
+            const stats = calcStats();
+            const luck = stats.luck;
+            
+            // Calculate luck-adjusted probabilities like in spinWheel2
+            const adjustedRewards = WHEEL2_REWARDS.map((r, idx) => {
+                let tier = 1;
+                if (idx >= 3) tier = 2; // Higher value rewards
+                if (idx >= 5) tier = 3; // Even higher
+                if (idx >= 6) tier = 4; // T3 Vouch
+                if (idx >= 7) tier = 5; // T4 Vouch
+                
+                // Boost probability by luck factor
+                let luckBoost = 1 + (luck - 1) * (tier - 1) * 0.15;
+                return r.prob * luckBoost;
+            });
+            
+            // Renormalize probabilities to sum to 1 and display
+            const totalProb = adjustedRewards.reduce((a, b) => a + b, 0);
+            const normalizedProbs = adjustedRewards.map(p => p / totalProb);
+            
+            WHEEL2_REWARDS.forEach((reward, idx) => {
+                const slot = document.createElement('div');
+                slot.className = 'wheel-slot';
+                slot.innerHTML = `<strong>${reward.name}</strong><br><span style="color: #ffeb3b; font-weight: bold;">${(normalizedProbs[idx] * 100).toFixed(1)}%</span>`;
+                container.appendChild(slot);
+            });
+        }
+
+        function updateWheelDisplay() {
+            renderWheelSlots(); // Redraw wheel
+            let ticketRequirement = 100;
+            ticketRequirement -= (game.tree.ticketspeed || 0) * 5;
+            ticketRequirement -= (game.tree.advanceticketspeed || 0) * 10;
+            ticketRequirement = Math.max(1, ticketRequirement);
+            const totalProgress = (game.wheelProgressCumulative || 0) + game.stage;
+            const progressToNext = totalProgress % ticketRequirement;
+            
+            document.getElementById("wheelTickets").innerText = game.wheelTickets;
+            document.getElementById("wheelProgress").innerText = `${progressToNext}/${ticketRequirement}`;
+            document.getElementById("vouchT1").innerText = game.wheelVouchers.t1;
+            document.getElementById("vouchT2").innerText = game.wheelVouchers.t2;
+            document.getElementById("vouchT3").innerText = game.wheelVouchers.t3;
+            document.getElementById("vouchPres").innerText = game.wheelVouchers.pres;
+            document.getElementById("wheelAtkBuff").innerText = game.wheelStats.atkBuff.toFixed(2) + "%";
+            document.getElementById("wheelHpBuff").innerText = game.wheelStats.hpBuff.toFixed(2) + "%";
+            document.getElementById("spinBtn").disabled = game.wheelTickets < 1;
+        }
+
+        function updateWheel2Display() {
+            renderWheel2Slots(); // Redraw wheel
+            document.getElementById("wheelTickets2").innerText = game.wheelTicketsT2;
+            document.getElementById("vouchT12").innerText = game.wheelVouchers.t1;
+            document.getElementById("vouchT22").innerText = game.wheelVouchers.t2;
+            document.getElementById("vouchT32").innerText = game.wheelVouchers.t3;
+            document.getElementById("vouchT42").innerText = game.wheelVouchers.t4;
+            document.getElementById("vouchPres2").innerText = game.wheelVouchers.pres;
+            document.getElementById("wheelAtkBuff2").innerText = game.wheelStats.atkBuff.toFixed(2) + "%";
+            document.getElementById("wheelHpBuff2").innerText = game.wheelStats.hpBuff.toFixed(2) + "%";
+            document.getElementById("spinBtn2").disabled = game.wheelTicketsT2 < 1;
+        }
+
+        // === 戰鬥與屬性計算 (連接新背包系統) ===
+        function getSum(s) { 
+            let t = 0; 
+            game.cards.forEach(c => { 
+                if (c.eq && c.stat === s) {
+                    let lvl = c.level || 1; // 確保舊卡牌預設為 Lv.1
+                    t += (c.val * Math.pow(2, lvl - 1)); 
+                }
+            }); 
+            Object.values(game.relics).forEach(r => { if(r.s === s) t += (r.v * r.count); }); 
+            if (game.equipped && game.equipped.rings) {
+                game.equipped.rings.forEach(ringId => {
+                    let ring = game.rings.find(rr => rr.id === ringId);
+                    if (ring && ring.extra && ring.extra[s]) {
+                        t += ring.extra[s];
+                    }
+                });
+            }
+            return t; 
+        }
+        
+        
+    function calcStats() {
+            let w = 0, a = 0;
+            if (game.equipped.weapon && game.inventory[game.equipped.weapon]) {
+                const wItem = game.inventory[game.equipped.weapon];
+                w = (wItem.base || 0) * (wItem.level || 1);
+            }
+            if (game.equipped.armor && game.inventory[game.equipped.armor]) {
+                const aItem = game.inventory[game.equipped.armor];
+                a = (aItem.base || 0) * (aItem.level || 1);
+            }
+
+            let ringHp = getRing("hpMulti") || 1;
+            let ringAtk = getRing("atkMulti") || 1;
+            if (ringHp === 0) ringHp = 1;
+            if (ringAtk === 0) ringAtk = 1;
+
+            const tree = game.tree || {};
+            let tAtk = tree.pwr || tree.atk || 0; 
+            let tHp = tree.hp || 0;
+            let tCrit = tree.crit || tree.critChance || 0;
+            let tCdmg = tree.cdmg || tree.critDmg || 0;
+
+            // 【終極修復】：把玩家點擊累積的 game.power 加回來！
+            // 讓 1 點 Power 提供 1 點基礎攻擊力，以及 10 點基礎血量 (可依你原本的設計調整)
+            // 【完美手感修復】：不再開根號，改用穩定的 0.3 倍率轉換！
+            // 這樣沒有「無感期」，每一點 Power 都會真實地貢獻 0.3 攻和 3 血。
+            let currentPower = game.power || 0;
+            
+            let powerAtkBonus = currentPower * 0.3; 
+            let powerHpBonus = currentPower * 3;
+
+            // 1. 基礎屬性 (小數點會在這裡加總，最後再乘上轉生倍率)
+            let hpBonus = getSum("hp") || 0;
+            let dmgBonus = getSum("dmg") || 0;
+            let hpdmgBonus = getSum("hpdmg") || 0; // Reforge card applies to both
+            let wheelHpBuff = (game.wheelStats && game.wheelStats.hpBuff) || 0;
+            let wheelAtkBuff = (game.wheelStats && game.wheelStats.atkBuff) || 0;
+            let hp = (100 + powerHpBonus + a + (tHp * 50)) * (1 + hpBonus + hpdmgBonus) * ringHp * (1 + wheelHpBuff / 100);
+            let atk = (1 + powerAtkBonus + w + (tAtk * 5)) * (1 + dmgBonus + hpdmgBonus) * ringAtk * (1 + wheelAtkBuff / 100);
+            
+            let critCh = getSum("critCh"); 
+            let critDmg = 2 + getSum("critDmg");
+            critCh += tCrit * 5;           // Adds 5% per level from "Critical Chance"
+            critDmg += 1 * tCdmg; // add 1.2x per level from "Critical Strike"
+            let luck = 1 + (getSum("luck") || 0);
+            
+            let regen = getSum("regen") || 0;
+            let dodge = getSum("dodge") || 0;
+            let drain = (getSum("drain") || 0) + (tree.drain || 0);
+            let thorns = getSum("thorns") || 0;
+            let dr = getSum("dr") || 0;
+            let defy = getSum("defy") || 0;
+
+            // 2. 特殊屬性 
+            let scChance = (tree.scChance || 0);
+            let scDmg = 5.0 + ((tree.scDmg || 0) * 2.5);
+            let pChance = (tree.pierce || 0);
+            let pDmg = 3.5;
+            let goldMult = Math.pow(1.5, tree.goldDig || 0);
+
+            // 3. 里程碑與 P 點升級加成
+            let reinc = game.reincarnations || 0;
+            let rUpg = game.rUpgrades || {};
+            let bHit = rUpg.brutalHit || 0;
+            let aTank = rUpg.absTank || 0;
+            let gRush = rUpg.goldRush || 0;
+
+            let dmgMult = 1, hpMult = 1;
+            
+            if (reinc >= 1) { dmgMult *= 1.25; hpMult *= 1.5; }
+            if (reinc >= 2) { dmgMult *= 3; hpMult *= 5; dr += 5; }
+            if (reinc >= 3) { dmgMult *= 7; hpMult *= 15; critCh += 8; critDmg *= 1.25; scChance += 2; scDmg *= 3; pDmg *= 3; goldMult *= 2; }
+            
+            if (bHit > 0) { dmgMult *= Math.pow(5, bHit); critCh += 7 * bHit; scChance += 1 * bHit; pChance += 3 * bHit; }
+            if (aTank > 0) { hpMult *= Math.pow(10, aTank); dr += 15 * aTank; drain += 0.5 * aTank; }
+            if (gRush > 0) { dodge += 7 * gRush; }
+
+            // New prestige multipliers
+            let dmgMutiLevel = tree.damagemuti || 0;
+            let hpMutiLevel = tree.hpmuti || 0;
+            let bigDmgMutiLevel = tree.bigdamagemuiti || 0;
+            let bigHpMutiLevel = tree.bighpmuti || 0;
+            let bloodlustLevel = tree.bloodlust || 0;
+
+            dmgMult *= Math.pow(1.2, dmgMutiLevel) * Math.pow(2, bigDmgMutiLevel) * Math.pow(1.1, bloodlustLevel);
+            hpMult *= Math.pow(1.35, hpMutiLevel) * Math.pow(3, bigHpMutiLevel);
+            drain += bloodlustLevel * 1;
+
+            atk = Math.floor(atk * dmgMult);
+            hp = Math.floor(hp * hpMult);
+            
+            critCh = Math.min(100, critCh);
+            dodge = Math.min(90, dodge);
+            dr = Math.min(95, dr);
+            defy = Math.min(90, defy);
+            let tokenGain = getSum("token") || 0;
+
+            return { hp, atk, critCh, critDmg, luck, regen, dodge, drain, thorns, dr, defy, scChance, scDmg, pChance, pDmg, goldMult, tokenGain };
+        }
+        function getClickPower() {
+            const baseClick = 1 + game.clickCount; 
+            const multi = (1 + game.tree.pwr) * getRing("clickMulti");
+            
+            // 【新增】計算 Power Clicker 的獨立乘算倍率 (1.25 的等級次方)
+            const pClickMult = Math.pow(1.25, game.tree.powerClick || 0);
+            
+            return baseClick * multi * pClickMult;
+        }
+
+        function gainPower() { game.power += getClickPower(); updateUI(); }
+        function buyUpgrade() { const c = 10 * Math.pow(1.5, game.clickCount); if (game.coins >= c) { game.coins -= c; game.clickCount++; updateUI(); } }
+        function buyMaxUpgrade() {
+            let bought = 0;
+            while (true) {
+                const c = 10 * Math.pow(1.5, game.clickCount);
+                if (game.coins >= c) {
+                    game.coins -= c;
+                    game.clickCount++;
+                    bought++;
+                } else {
+                    break;
+                }
+            }
+            if (bought > 0) {
+                logMessage(`Bought ${bought} click upgrades!`, "card-text");
+                updateUI();
+            }
+        }
+
+// --- 區域難度與獎勵配置表 ---
+const ZONE_CONFIGS = [
+    // goldGrowth: 每關金幣成長, goldJump: 進入新區域時的金幣翻倍率
+    { growth: 1.15, jump: 1.0,  atkGrowth: 1.05, goldGrowth: 1.10, goldJump: 1.0 }, //zone 1
+    { growth: 1.20, jump: 2.0,  atkGrowth: 1.13, goldGrowth: 1.15, goldJump: 2.0 }, //zone 2
+    { growth: 1.27, jump: 2.5,  atkGrowth: 1.17, goldGrowth: 1.20, goldJump: 2.5 }, //zone 3
+    { growth: 1.35, jump: 3.0,  atkGrowth: 1.23, goldGrowth: 1.25, goldJump: 3.0 }, //zone 4
+    { growth: 1.40, jump: 4.0,  atkGrowth: 1.30, goldGrowth: 1.35, goldJump: 4.3 }, //zone 5
+    { growth: 1.55, jump: 4.2,  atkGrowth: 1.45, goldGrowth: 1.45, goldJump: 5.0 }, //zone 6
+    { growth: 1.80, jump: 5.0,  atkGrowth: 1.65, goldGrowth: 1.70, goldJump: 7.0 }, //zone 7
+    { growth: 2.05, jump: 6.0,  atkGrowth: 1.80, goldGrowth: 2.00, goldJump: 10.0 }, //zone 8
+    { growth: 2.25, jump: 8.0, atkGrowth: 2.00, goldGrowth: 2.25, goldJump: 12.5 }, //zone 9
+    { growth: 2.60, jump: 12.0, atkGrowth: 2.50, goldGrowth: 2.50, goldJump: 17.0 }, //zone 10
+    { growth: 4.00, jump: 17.0, atkGrowth: 3.25, goldGrowth: 4.00, goldJump: 50.0 }, // Zone 11
+    { growth: 5.00, jump: 23.0, atkGrowth: 5.00, goldGrowth: 5.00, goldJump: 100.0 }, // Zone 12
+    { growth: 7.00, jump: 30.0, atkGrowth: 6.50, goldGrowth: 7.00, goldJump: 200.0 }, // Zone 13
+    { growth: 10.00, jump: 45.0, atkGrowth: 10.00, goldGrowth: 10.00, goldJump: 500.0 }, // Zone 14
+    { growth: 15.00, jump: 70.0, atkGrowth: 15.00, goldGrowth: 15.00, goldJump: 1000.0 }, // Zone 15
+    { growth: 25.00, jump: 1000.0, atkGrowth: 25.00, goldGrowth: 25.00, goldJump: 2000.0 }, // Zone 16
+    { growth: 40.00, jump: 2000.0, atkGrowth: 40.00, goldGrowth: 40.00, goldJump: 5000.0 }, // Zone 17
+    { growth: 70.00, jump: 5000.0, atkGrowth: 70.00, goldGrowth: 70.00, goldJump: 10000.0 }, // Zone 18
+    { growth: 100.00,jump:10000.0,atkGrowth:100.00,goldGrowth:100.00,goldJump:20000.0 }, // Zone 19
+    { growth:150.00,jump:20000.0,atkGrowth:150.00,goldGrowth:150.00,goldJump:50000.0 } // Zone 20
+];
+
+function spawnEnemy() {
+    const s = calcStats();
+    const zoneIndex = Math.min(20, Math.floor((game.stage - 1) / 10));
+    
+    let baseHp = 10;
+    let baseAtk = 1;
+    let baseGold = 5; // 第一關基礎金幣
+
+    // 累積之前區域的所有成長
+    for (let i = 0; i < zoneIndex; i++) {
+        const prev = ZONE_CONFIGS[i];
+        const next = ZONE_CONFIGS[i+1];
+        baseHp = baseHp * Math.pow(prev.growth, 10) * next.jump;
+        baseAtk = baseAtk * Math.pow(prev.atkGrowth, 10) * next.jump;
+        baseGold = baseGold * Math.pow(prev.goldGrowth, 10) * next.goldJump;
+    }
+
+    const relativeStage = ((game.stage - 1) % 10);
+    const config = ZONE_CONFIGS[zoneIndex];
+    
+    let eHp = Math.floor(baseHp * Math.pow(config.growth, relativeStage));
+    let eAtk = Math.floor(baseAtk * Math.pow(config.atkGrowth, relativeStage));
+    let eGold = Math.floor(baseGold * Math.pow(config.goldGrowth, relativeStage));
+
+    enemy.isBoss = (game.stage % 10 === 0);
+    if (enemy.isBoss) {
+        eHp *= 5;
+        eAtk *= 2;
+        eGold *= 3; // Boss 給予 3 倍金幣
+    }
+
+    enemy.max = eHp;
+    enemy.hp = eHp;
+    enemy.atk = eAtk;
+    enemy.reward = eGold; // 將計算好的金幣存入 enemy 物件
+    enemy.dotDmg = 0; // Reset Pierce DoT
+    enemy.dotTicks = 0;
+    enemy.poisonDmg = 0; // Reset Poison DoT
+    enemy.poisonRounds = 0;
+
+    if (s.regen > 0) {
+        game.playerHp = Math.min(s.hp, game.playerHp + Math.floor(s.hp * (s.regen / 100)));
+    }
+    updateUI();
+}
+
+function fightEnemy() {
+            let stats = calcStats();
+            let dmg = stats.atk;
+            let isCrit = false, isSuperCrit = false, isPierce = false;
+
+            // 1. 一般爆擊
+            if (Math.random() < stats.critCh / 100) { 
+                dmg = Math.floor(dmg * stats.critDmg); 
+                isCrit = true; 
+            }
+            
+            // 2. 超級爆擊 (直接讀取 stats.scChance)
+            if (stats.scChance > 0 && Math.random() < stats.scChance / 100) {
+                dmg = Math.floor(dmg * stats.scDmg);
+                isSuperCrit = true;
+            }
+
+            // 3. 穿透攻擊 (直接讀取 stats.pChance)
+            if (stats.pChance > 0 && Math.random() < stats.pChance / 100) {
+                dmg = Math.floor(dmg * stats.pDmg); 
+                isPierce = true;
+                enemy.dotDmg = Math.floor(dmg * 0.1);
+                enemy.dotTicks = 10;
+                // Enhance DoT: Apply crit multipliers to DoT damage
+                if (game.tree.enDot > 0) {
+                    if (Math.random() < stats.critCh / 100) {
+                        enemy.dotDmg = Math.floor(enemy.dotDmg * stats.critDmg);
+                        if (stats.scChance > 0 && Math.random() < stats.scChance / 100) {
+                            enemy.dotDmg = Math.floor(enemy.dotDmg * stats.scDmg);
+                        }
+                    }
+                }
+            }
+
+            // New prestige effects
+            // Kill Streak damage bonus
+            let killStreakLevel = game.tree.killstreak || 0;
+            if (killStreakLevel > 0) {
+                dmg = Math.floor(dmg * Math.pow(1.15, game.killStreak));
+            }
+
+            // Last Breath damage bonus
+            let lastBreathLevel = game.tree.lastbreath || 0;
+            if (lastBreathLevel > 0 && game.playerHp <= stats.hp * 0.2) {
+                dmg = Math.floor(dmg * 2);
+            }
+
+            //4. 毒性攻擊 (新增中毒效果，持續 3回合，每秒造成 10% 的初始傷害)
+            let poisonLevel = game.tree.poison || 0;
+            if (poisonLevel > 0) {
+            let poisonChance = poisonLevel * 0.03;
+            if (Math.random() < poisonChance) {
+            // Store the poison data directly on the global enemy object
+            window.enemy.poisonDmg = Math.max(1, Math.floor(dmg * 0.10)); 
+            window.enemy.poisonRounds = 3;
+            // Enhance DoT: Apply crit multipliers to poison damage
+            if (game.tree.enDot > 0) {
+                if (Math.random() < stats.critCh / 100) {
+                    window.enemy.poisonDmg = Math.floor(window.enemy.poisonDmg * stats.critDmg);
+                    if (stats.scChance > 0 && Math.random() < stats.scChance / 100) {
+                        window.enemy.poisonDmg = Math.floor(window.enemy.poisonDmg * stats.scDmg);
+                    }
+                }
+            }
+        
+            logMessage(`🧪 You poisoned the enemy!`, "poison-text");}
+        
+            }
+
+            // Instakill check
+            let instakillLevel = game.tree.instakill || 0;
+            if (instakillLevel > 0 && !enemy.isBoss && Math.random() < (instakillLevel * 0.001)) {
+                enemy.hp = 0;
+                logMessage(`💀 INSTAKILL! Enemy instantly destroyed!`, "damage-text");
+                defeatEnemy(stats);
+                return;
+            }
+
+            enemy.hp -= dmg;
+            if (stats.drain > 0) {
+                const h = Math.floor(dmg * (stats.drain/100));
+                if (h > 0) { game.playerHp = Math.min(stats.hp, game.playerHp + h); logMessage(`Lifesteal healed ${format(h)}!`, "heal-text"); }
+            }
+
+            // --- 斬殺邏輯 (Execution) ---
+            let execLevel = game.tree.execute || 0;
+            if (execLevel > 0 && enemy.hp > 0) {
+                // 計算斬殺線：(0.5% * 等級) * 敵人最大血量
+                let threshold = enemy.max * (execLevel * 0.005); 
+                if (enemy.hp <= threshold) {
+                    enemy.hp = 0;
+                    logMessage(`💀 [EXECUTION] Enemy instantly shattered!`, "damage-text");
+                }
+            }
+            
+            if (enemy.hp <= 0) {
+                defeatEnemy(stats);
+                return;
+            }
+
+            if (isPierce) logMessage(`💥 PIERCE! Dealt ${format(dmg)} DMG!`, "attack-text");
+            else if (isSuperCrit) logMessage(`🔥 SUPER CRIT! Dealt ${format(dmg)} DMG!`, "attack-text");
+            else if (isCrit) logMessage(`⚡ CRIT! Dealt ${format(dmg)} DMG!`, "attack-text");
+            else logMessage(`Hit for ${format(dmg)}!`, "damage-text");
+
+            // 敵人攻擊與玩家防禦 (使用加上了上限的 stats.dodge 和 stats.dr)
+            if (Math.random() > stats.dodge/100) {
+                let eD = Math.max(1, Math.floor(enemy.atk * (1 - stats.dr/100)));
+                if (stats.absorb > 0) game.playerHp = Math.min(stats.hp, game.playerHp + Math.floor(enemy.atk * stats.absorb));
+                game.playerHp -= eD;
+                if (stats.thorns > 0) {
+                    const t = Math.floor(eD * (stats.thorns/100)); enemy.hp -= t; logMessage(`Thorns reflect ${format(t)}!`);
+                    if (enemy.hp <= 0) { defeatEnemy(stats); return; }
+                }
+                if (game.playerHp <= 0) {
+                    if (Math.random() < stats.defy/100) { game.playerHp = Math.floor(stats.hp * 0.1); logMessage("Death Defied!", "boss-loot-text"); }
+                    else { 
+                        logMessage("You died! -1 Stage", "boss-text"); 
+                        game.stage = Math.max(1, game.stage - 1); 
+                        game.playerHp = stats.hp; 
+                        game.killStreak = 0; // Reset kill streak on death
+                        // Stop auto-attack on death
+                        if (game.autoAttack) {
+                            game.autoAttack = false;
+                            document.getElementById("autoAttackBtn").innerText = "🔄 Auto Attack (OFF)";
+                            document.getElementById("autoAttackBtn").style.background = "#4CAF50";
+                            if (autoAttackInterval) {
+                                clearInterval(autoAttackInterval);
+                                autoAttackInterval = null;
+                            }
+                        }
+                        spawnEnemy(); 
+                        return; 
+                    }
+                }
+            } else logMessage("Dodged attack!", "heal-text");
+
+            updateUI();
+        }
+
+        function toggleAutoAttack() {
+            game.autoAttack = !game.autoAttack;
+            const btn = document.getElementById("autoAttackBtn");
+            
+            if (game.autoAttack) {
+                btn.innerText = "🔄 Auto Attack (ON)";
+                btn.style.background = "#f44336";
+                autoAttackInterval = setInterval(() => {
+                    if (game.playerHp > 0 && enemy.hp > 0) {
+                        fightEnemy();
+                    }
+                }, 100);
+                logMessage("Auto-attack enabled!", "card-text");
+            } else {
+                btn.innerText = "🔄 Auto Attack (OFF)";
+                btn.style.background = "#4CAF50";
+                if (autoAttackInterval) {
+                    clearInterval(autoAttackInterval);
+                    autoAttackInterval = null;
+                }
+                logMessage("Auto-attack disabled!", "damage-text");
+            }
+        }
+
+        // --- 打寶與經驗升級系統 ---
+        // --- 打寶與經驗升級系統 (已更新掉落機率) ---
+        function defeatEnemy(s) {
+            // Increment kill streak
+            game.killStreak = (game.killStreak || 0) + 1;
+
+            // 1. 金幣與加成計算 (包含 Gold Digger 與 Gold Rusher)
+            let reinc = game.reincarnations || 0;
+            let rUpg = game.rUpgrades || { goldRush: 0, brutalHit: 0, absTank: 0 };
+            
+            let goldMult = Math.pow(1.5, game.tree.goldDig || 0);
+            if (reinc >= 3) goldMult *= 2; // 3rd Milestone: 2x Coin
+            if (rUpg.goldRush > 0) {
+                for (let i = 0; i < rUpg.goldRush; i++) goldMult *= (Math.random() * 9.5 + 0.5); 
+            }
+            
+            const cG = Math.floor((game.stage * 3) * (1 + game.tree.coin * 0.75 + getSum("gold")) * getRing("coinMulti") * goldMult);
+            game.coins += cG; 
+            logMessage(`Got ${format(cG)} coins!`, "loot-text");
+
+            if (s.tokenGain > 0) {
+                game.tokens += s.tokenGain;
+                logMessage(`+${s.tokenGain} Token from ring effect!`, "loot-text");
+            }
+            
+            // 2. 恢復玩家滿血 (就是這行剛剛不見了！)
+            game.playerHp = s.hp;
+            
+            // 3. Boss 與寶石邏輯
+            if (enemy.isBoss && game.stage > game.highestGemBoss) { 
+                game.highestGemBoss = game.stage; 
+                if (game.tree.cards > 0) { 
+                    let gemGain = reinc >= 2 ? 2 : 1; 
+                    game.gems += gemGain; 
+                    logMessage(`💎 +${gemGain} Gem!`, "relic-text"); 
+                } 
+            }
+            
+            // 4. 遺物掉落判定 (0.1%)
+            if (Math.random() < (0.001 * s.luck)) {
+                // 自動適應最新的區域數量
+                const p = RELIC_POOLS[Math.min(RELIC_POOLS.length - 1, Math.floor((game.stage - 1)/10))]; 
+                const r = p[Math.floor(Math.random()*p.length)];
+                if (!game.relics[r.id]) game.relics[r.id] = {...r, count:0}; 
+                game.relics[r.id].count++; 
+                logMessage(`🏺 Relic: ${r.n}!`, "relic-text"); 
+                renderRelics();
+            }
+
+            // 5. 裝備掉落邏輯
+            // 自動適應最新的區域數量
+            const pool = GEAR_POOLS[Math.min(GEAR_POOLS.length - 1, Math.floor((game.stage - 1)/10))];
+            let droppedGear = null;
+
+            if (enemy.isBoss) {
+                if (Math.random() < 0.10 * s.luck) droppedGear = pool.boss[Math.floor(Math.random() * pool.boss.length)];
+                else if (Math.random() < 0.50 * s.luck) droppedGear = pool.normal[Math.floor(Math.random() * pool.normal.length)];
+            } else {
+                if (Math.random() < 0.10 * s.luck) droppedGear = pool.normal[Math.floor(Math.random() * pool.normal.length)];
+            }
+
+            if (droppedGear) {
+                if (!game.inventory[droppedGear.name]) {
+                    game.inventory[droppedGear.name] = { level: 1, exp: 0, type: droppedGear.type, base: droppedGear.stat };
+                    logMessage(`Found New Gear: ${droppedGear.name}!`, "loot-text");
+                } else {
+                    let item = game.inventory[droppedGear.name];
+                    item.exp++;
+                    let reqExp = item.level * 2;
+                    if (item.exp >= reqExp) {
+                        item.exp -= reqExp;
+                        item.level++;
+                        logMessage(`${droppedGear.name} leveled up to Lv.${item.level}!`, "heal-text");
+                        if (game.equipped[item.type] === droppedGear.name) game.playerHp = calcStats().hp;
+                    } else {
+                        logMessage(`Found duplicate ${droppedGear.name} (+1 EXP)`, "loot-text");
+                    }
+                }
+                renderInventory();
+            }
+
+            // 6. 推進關卡並生成新怪物
+            if (game.stage >= game.maxStage) game.maxStage = game.stage + 1;
+            if (game.stage > game.histMaxStage) game.histMaxStage = game.stage;
+            if (game.stage > game.maxStageEver) game.maxStageEver = game.stage;
+            if (game.stage === game.maxStage - 1) game.stage++;
+            
+            // 7. 輪盤票券檢核 (每100階段 +1票，跨越轉生累積)
+            let ticketRequirement = 100;
+            ticketRequirement -= (game.tree.ticketspeed || 0) * 5;
+            ticketRequirement -= (game.tree.advanceticketspeed || 0) * 10;
+            ticketRequirement = Math.max(1, ticketRequirement);
+            const totalProgress = (game.wheelProgressCumulative || 0) + game.stage;
+            const ticketsShouldBe = Math.floor(totalProgress / ticketRequirement);
+            const alreadyAwarded = game.wheelTicketsAwarded || 0;
+            if (ticketsShouldBe > alreadyAwarded) {
+                const newTickets = ticketsShouldBe - alreadyAwarded;
+                game.wheelTickets += newTickets;
+                game.wheelTicketsAwarded = ticketsShouldBe;
+                logMessage(`🎫 +${newTickets} Wheel Ticket!`, "loot-text");
+            }
+
+            spawnEnemy();
+        }
+
+        function changeStage(d) { let n = game.stage + d; if (n >= 1 && n <= game.maxStage) { game.stage = n; game.playerHp = calcStats().hp; spawnEnemy(); updateUI(); } }
+
+        // === UI 與其他系統 ===
+        function updateUI() {
+            const s = calcStats();
+            document.getElementById("playerHpDisplay").innerText = format(Math.max(0, game.playerHp)); document.getElementById("playerMaxHpDisplay").innerText = format(s.hp);
+            document.getElementById("attackDisplay").innerText = format(s.atk); document.getElementById("powerDisplay").innerText = format(game.power);
+            document.getElementById("coinDisplay").innerText = format(game.coins); document.getElementById("gemDisplay").innerText = format(game.gems);
+            
+            document.getElementById("statCrit").innerText = s.critCh.toFixed(1); document.getElementById("statCritDmg").innerText = s.critDmg.toFixed(2);
+            document.getElementById("statSCrit").innerText = s.scChance.toFixed(1); document.getElementById("statSCritDmg").innerText = s.scDmg.toFixed(2);
+            document.getElementById("statPierce").innerText = s.pChance.toFixed(1);
+            document.getElementById("statDodge").innerText = s.dodge.toFixed(1); document.getElementById("statDrain").innerText = s.drain.toFixed(1);
+            document.getElementById("statThorns").innerText = s.thorns.toFixed(1); document.getElementById("statDr").innerText = s.dr.toFixed(1); document.getElementById("statDefy").innerText = s.defy.toFixed(1);
+            document.getElementById("statRegen").innerText = s.regen.toFixed(2); document.getElementById("statLuck").innerText = s.luck.toFixed(2); document.getElementById("statGoldMult").innerText = s.goldMult.toFixed(2);
+            
+            document.getElementById("stageDisplay").innerText = game.stage; document.getElementById("bossIndicator").innerText = enemy.isBoss ? " (BOSS)" : "";
+            document.getElementById("zoneDisplay").innerText = ZONE_NAMES[Math.min(ZONE_NAMES.length - 1, Math.floor((game.stage - 1)/10))];
+            
+            document.getElementById("enemyHpDisplay").innerText = format(Math.max(0, enemy.hp)); document.getElementById("enemyMaxHpDisplay").innerText = format(enemy.max);
+            
+            document.getElementById("clickValueDisplay").innerText = format(getClickPower()); document.getElementById("upgradeCostDisplay").innerText = format(10 * Math.pow(1.5, game.clickCount));
+
+            document.getElementById("playerHpBar").style.width = Math.max(0, (game.playerHp / s.hp) * 100) + "%";
+            document.getElementById("enemyHpBar").style.width = Math.max(0, (enemy.hp / enemy.max) * 100) + "%";
+
+            document.getElementById("prestigeBtn").style.display = game.stage >= 20 ? "inline-block" : "none";
+            document.getElementById("tabBtnCards").style.display = game.tree.cards > 0 ? "inline-block" : "none";
+            document.getElementById("pDisplay").innerText = game.p || 0;
+        if(game.rUpgrades) {
+            document.getElementById("rlvl_goldRush").innerText = game.rUpgrades.goldRush;
+            document.getElementById("rlvl_brutalHit").innerText = game.rUpgrades.brutalHit;
+            document.getElementById("rlvl_absTank").innerText = game.rUpgrades.absTank;
+        }
+        let reinc = game.reincarnations || 0;
+        document.getElementById("rm1").style.color = reinc >= 1 ? "#4CAF50" : "#555";
+        document.getElementById("rm2").style.color = reinc >= 2 ? "#4CAF50" : "#555";
+        document.getElementById("rm3").style.color = reinc >= 3 ? "#4CAF50" : "#555";
+        // Show wheel tab only if prestige wheel upgrade is unlocked
+        const hasWheelUpgrade = game.tree && game.tree.wheel > 0;
+        document.getElementById("tabBtnWheel").style.display = hasWheelUpgrade ? "inline-block" : "none";
+        const hasWheel2Upgrade = game.tree && game.tree.secondwheel > 0;
+        document.getElementById("tabBtnWheel2").style.display = hasWheel2Upgrade ? "inline-block" : "none";
+        updateWheelDisplay();
+        if (hasWheel2Upgrade) updateWheel2Display();
+        updateVoucherButtonVisibility();
+        
+        // Update auto-attack button state
+        const autoAttackBtn = document.getElementById("autoAttackBtn");
+        if (autoAttackBtn) {
+            autoAttackBtn.innerText = game.autoAttack ? "🔄 Auto Attack (ON)" : "🔄 Auto Attack (OFF)";
+            autoAttackBtn.style.background = game.autoAttack ? "#FF5722" : "#4CAF50";
+        }
+        }
+
+        // --- 新的裝備介面渲染邏輯 ---
+        function equipGearItem(name, type) {
+            if (game.equipped[type] === name) game.equipped[type] = null; // 脫下
+            else game.equipped[type] = name; // 穿上
+            game.playerHp = calcStats().hp; renderInventory(); updateUI();
+        }
+
+        function renderInventory() {
+            const d = document.getElementById('inventoryList'); d.innerHTML = '';
+            
+            if (Object.keys(game.inventory).length === 0) {
+                d.innerHTML = "<em>Kill enemies to find gear!</em>";
+            } else {
+                // 列出所有背包中的裝備
+                Object.keys(game.inventory).forEach(name => {
+                    const item = game.inventory[name];
+                    const isEq = game.equipped[item.type] === name;
+                    const reqExp = item.level * 2;
+                    const currentStat = item.base * item.level;
+                    
+                    // 【新增這行】將名稱中的單引號替換為帶有跳脫字元的單引號，避免破壞 HTML 結構
+                    const safeName = name.replace(/'/g, "\\'");
+                    
+                    d.innerHTML += `<div class="inv-item">
+                        <div style="text-align:left;">
+                            <strong>${name} (Lv.${item.level})</strong><br>
+                            <small>+${currentStat} ${item.type === 'weapon' ? 'Atk' : 'HP'} | EXP: ${item.exp}/${reqExp}</small>
+                        </div>
+                        <div>
+                            <button onclick="equipGearItem('${safeName}', '${item.type}')" style="background:${isEq ? '#f44336' : '#4CAF50'}">${isEq ? 'Unequip' : 'Equip'}</button>
+                        </div>
+                    </div>`;
+                });
+            }
+
+            // 顯示當前穿著的裝備與總屬性
+            const eqW = game.equipped.weapon ? game.inventory[game.equipped.weapon] : null;
+            const eqA = game.equipped.armor ? game.inventory[game.equipped.armor] : null;
+            document.getElementById('eqWeapon').innerText = eqW ? `${game.equipped.weapon} (+${eqW.base * eqW.level} Atk)` : 'None';
+            document.getElementById('eqArmor').innerText = eqA ? `${game.equipped.armor} (+${eqA.base * eqA.level} HP)` : 'None';
+        }
+
+        function autoEquipBest() {
+            let bestWeapon = null;
+            let bestWeaponStat = 0;
+            let bestArmor = null;
+            let bestArmorStat = 0;
+
+            Object.keys(game.inventory).forEach(name => {
+                const item = game.inventory[name];
+                const stat = item.base * item.level;
+                if (item.type === 'weapon' && stat > bestWeaponStat) {
+                    bestWeapon = name;
+                    bestWeaponStat = stat;
+                } else if (item.type === 'armor' && stat > bestArmorStat) {
+                    bestArmor = name;
+                    bestArmorStat = stat;
+                }
+            });
+
+            let equipped = false;
+            if (bestWeapon && game.equipped.weapon !== bestWeapon) {
+                game.equipped.weapon = bestWeapon;
+                equipped = true;
+                logMessage(`Auto-equipped best weapon: ${bestWeapon}`, "loot-text");
+            }
+            if (bestArmor && game.equipped.armor !== bestArmor) {
+                game.equipped.armor = bestArmor;
+                equipped = true;
+                logMessage(`Auto-equipped best armor: ${bestArmor}`, "loot-text");
+            }
+            if (equipped) {
+                game.playerHp = calcStats().hp;
+                renderInventory();
+                updateUI();
+            } else {
+                logMessage("No better gear found!", "damage-text");
+            }
+        }
+
+        // --- 其他系統渲染 ---
+        function craftRing(tier, useVoucher = false) {
+    const tierMap = { 1: 't1', 2: 't2', 3: 't3', 4: 't4' };
+    const vouchKey = tierMap[tier];
+    
+    // Check if using voucher
+    if (useVoucher) {
+        if (!game.wheelVouchers || game.wheelVouchers[vouchKey] < 1) {
+            logMessage(`No T${tier} vouchers available!`);
+            return;
+        }
+        game.wheelVouchers[vouchKey]--;
+        logMessage(`✨ Used T${tier} Ring Voucher!`, "boss-loot-text");
+    } else {
+        // Normal cost path
+        const baseCost = tier === 1 ? 1000 : (tier === 2 ? 1000000 : (tier === 3 ? 1000000000 : 1000000000000));
+        let cost = baseCost;
+        const reinc = game.reincarnations || 0;
+
+        // Apply Reincarnation Discounts
+        if (reinc >= 3) {
+            if (tier >= 3) cost = baseCost * 0.05;
+            else if (tier === 2) cost = baseCost * 0.2;
+        } else if (reinc >= 2) {
+            if (tier >= 2) cost = baseCost * 0.2;
+        } else if (reinc >= 1) {
+            if (tier >= 3) cost = baseCost * 0.5;
+        }
+
+        if (game.coins < cost) {
+            logMessage("Not enough coins!");
+            return;
+        }
+        game.coins -= cost;
+    }
+    
+    // Proceed with crafting (shared logic)
+    if (true) {
+        // 1. Determine Category (Type)
+        let rRoll = Math.random() * 100;
+        let cumulative = 0;
+        let selectedCat = RING_CATEGORIES[0];
+        for (let c of RING_CATEGORIES) {
+            cumulative += c.chance;
+            if (rRoll <= cumulative) {
+                selectedCat = c;
+                break;
+            }
+        }
+
+        // 2. Determine Rarity
+        let rarRoll = Math.random() * 100;
+        let rarCumulative = 0;
+        let rarIndex = 0;
+        const chances = RARITY_CHANCES[tier - 1];
+        for (let i = 0; i < chances.length; i++) {
+            rarCumulative += chances[i];
+            if (rarRoll <= rarCumulative) {
+                rarIndex = i;
+                break;
+            }
+        }
+        const selectedRarity = RING_RARITIES[rarIndex];
+
+        // 3. Determine Quality
+        const range = QUALITY_RANGES[tier - 1];
+        const quality = Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
+
+        // 4. Calculate Value (new rarity base stat ranges for 100% quality)
+        const rarityStatRanges = {
+            Common: [0.8, 1.5],
+            Uncommon: [3.0, 4.8],
+            Rare: [5.0, 9.0],
+            Epic: [7.0, 11.0],
+            Legendary: [10.0, 15.0],
+            Mythical: [13.0, 20.0]
+        };
+
+        const baseRange = rarityStatRanges[selectedRarity.name] || [1, 1];
+        const baseStat100 = baseRange[0] + Math.random() * (baseRange[1] - baseRange[0]); // at 100% quality
+        const tierBoost = tier === 1 ? 1 : tier === 2 ? 3 : tier === 3 ? 10 : 100;
+        const statAtQuality = baseStat100 * (quality / 100);
+        const value = 1 + statAtQuality * tierBoost;
+
+        // 5. Create Ring Object
+        const newRing = {
+            id: "ring_" + Date.now() + "_" + Math.floor(Math.random() * 10000),
+            n: `${selectedRarity.name} ${selectedCat.name} Ring (T${tier})`,
+            r: selectedRarity.name,
+            s: selectedCat.statType,
+            q: quality,
+            v: value,
+            tier: tier,
+            baseStat: baseStat100,
+            tierBoost: tierBoost,
+            potential: Math.random() < 0.10, // 10% potential chance
+            advancedType: null,
+            apex: false,
+            apexPotential: false,
+            extra: {},
+            locked: false
+        };
+
+        // 6. Handle Auto-Scrap or Add to Inventory
+        // Check if ring should be auto-scrapped: must not have potential AND tier must be enabled AND tier-specific rarity must be enabled
+        const autoScrapKey = `t${tier}-${selectedCat.name}-${selectedRarity.name}`;
+        const tierKey = `tier-${tier}`;
+        const shouldAutoScrap = !newRing.potential && 
+                                game.autoScrap && 
+                                game.autoScrap[autoScrapKey] && 
+                                game.autoScrap[tierKey];
+        
+        if (shouldAutoScrap) {
+            const scrapAmount = Math.max(1, Math.floor(SCRAP_VALUES[selectedRarity.name] * (quality / 100)));
+            game.ringScrap = (game.ringScrap || 0) + scrapAmount;
+            logMessage(`Auto-scrapped ${newRing.n} for ${scrapAmount} Scraps.`, "loot-text");
+        } else {
+            if (!game.rings) game.rings = [];
+            game.rings.push(newRing);
+            logMessage(`Crafted: <span class="r-${selectedRarity.name.toLowerCase()}">${newRing.n}</span> (Q:${quality}%)`, "loot-text");
+        }
+
+        renderRings();
+        updateUI();
+        saveGame();
+    }
+}
+
+function upgradeRingToAdvanced(ringId) {
+    if (!game.rings) return;
+    let ring = game.rings.find(r => r.id === ringId);
+    if (!ring) return;
+
+    if (!ring.potential || ring.q < 100) {
+        alert("Ring must have potential (*) and be 100% quality to advance.");
+        return;
+    }
+    if (ring.advancedType) {
+        alert("This ring is already advanced.");
+        return;
+    }
+    if ((game.ringScrap || 0) < 200) {
+        alert("Need 200 scraps to advance this ring.");
+        return;
+    }
+
+    const typeName = getCategoryByStat(ring.s);
+    let advType = null;
+    if (typeName === 'Attack') advType = 'massacre';
+    if (typeName === 'Defense') advType = 'life';
+    if (typeName === 'Ability') advType = 'power';
+    if (typeName === 'Special') advType = 'wealth';
+
+    const existingAdvanced = (game.equipped && game.equipped.rings || []).map(id => game.rings.find(r => r.id === id)).filter(Boolean);
+    if (existingAdvanced.some(r => r.advancedType === advType)) {
+        alert(`You can only equip one advanced ${advType} ring at a time.`);
+        return;
+    }
+
+    game.ringScrap -= 200;
+    ring.potential = false;
+    ring.advancedType = advType;
+    ring.q = 100;
+
+    if (advType === 'wealth') {
+        ring.v = 1 + (ring.v - 1) * 1.5;
+    } else {
+        ring.v = 1 + (ring.v - 1) * 2;
+    }
+
+    ring.extra = ring.extra || {};
+    if (advType === 'massacre') {
+        ring.n = `Ring of Massacre`;
+        ring.extra.critCh = (Math.random() * 2) + 1;
+        ring.extra.critDmg = (Math.random() * 3) + 2;
+        ring.extra.drain = (Math.random() * 1) + 0.5;
+    } else if (advType === 'life') {
+        ring.n = `Ring of Life`;
+        ring.extra.dr = (Math.random() * 3) + 2;
+        ring.extra.thorns = (Math.random() * 2) + 3;
+        ring.extra.regen = (Math.random() * 4) + 1;
+    } else if (advType === 'power') {
+        ring.n = `Ring of Power`;
+        ring.extra.clickMulti = (Math.random() * 2) + 1;
+    } else if (advType === 'wealth') {
+        ring.n = `Ring of Wealth`;
+        ring.extra.coinMulti = (Math.random() * 4) + 1;
+        ring.extra.token = Math.floor(Math.random() * 4);
+    }
+
+    ring.apexPotential = Math.random() < 0.10;
+    ring.apex = false;
+
+    renderRings();
+    saveGame();
+}
+
+function forgeApexRing(ringId) {
+    if (!game.rings) return;
+    let ring = game.rings.find(r => r.id === ringId);
+    if (!ring || !ring.advancedType || !ring.apexPotential) {
+        alert("This ring is not eligible for apex reforging.");
+        return;
+    }
+    if (ring.apex) {
+        alert("Already an Apex ring.");
+        return;
+    }
+    if ((game.ringScrap || 0) < 2000) {
+        alert("Need 2000 scraps to forge to Apex.");
+        return;
+    }
+
+    const equippedRings = (game.equipped && game.equipped.rings) ? game.equipped.rings.map(id => game.rings.find(r => r.id === id)).filter(Boolean) : [];
+    if (equippedRings.some(r => r.apex)) {
+        alert("Only one Apex ring can be equipped at a time.");
+        return;
+    }
+
+    game.ringScrap -= 2000;
+    ring.apex = true;
+    ring.q = 100;
+    ring.v = 1 + (ring.v - 1) * 2;
+    ring.n = `Apex ${ring.n}`;
+    ring.apexPotential = false;
+
+    renderRings();
+    saveGame();
+}
+
+function updateVoucherButtonVisibility() {
+    for (let tier = 1; tier <= 4; tier++) {
+        const vouchKey = ['', 't1', 't2', 't3', 't4'][tier];
+        const hasVouch = game.wheelVouchers && game.wheelVouchers[vouchKey] > 0;
+        const btn = document.getElementById(`vouchBtn-t${tier}`);
+        if (btn) {
+            btn.style.display = hasVouch ? 'inline-block' : 'none';
+        }
+    }
+}
+  
+       
+// 【新增】分解戒指功能
+        function scrapRing(id) {
+            if (game.scraps === undefined) game.scraps = 0;
+            const index = game.rings.findIndex(x => x.id === id);
+            if (index === -1) return;
+            
+            const r = game.rings[index];
+            
+            // 如果戒指正在裝備中，先把它脫下來
+            if (game.equipped.rings) {
+                const eqIdx = game.equipped.rings.findIndex(x => x.id === id);
+                if (eqIdx !== -1) game.equipped.rings.splice(eqIdx, 1);
+            }
+
+            // 計算獲得的碎片數量 (基礎值 * 品質百分比)
+            const scrapAmount = Math.max(1, Math.floor(SCRAP_VALUES[r.r] * (r.q / 100)));
+            game.scraps += scrapAmount;
+            
+            // 從背包移除
+            game.rings.splice(index, 1);
+            
+            logMessage(`Scrapped ${r.n} for ${scrapAmount} Scraps!`, "loot-text");
+            game.playerHp = calcStats().hp; 
+            renderRings(); 
+            updateUI();
+        }
+
+        
+
+        // 輔助函數：把內部變數名稱轉換為好讀的文字
+        function getStatName(s) {
+            if (s === 'atkMulti') return 'Attack';
+            if (s === 'hpMulti') return 'Defense (HP)';
+            if (s === 'clickMulti') return 'Click Power';
+            if (s === 'coinMulti') return 'Coin Drop';
+            return 'Stat';
+        }
+
+        // 【功能 1】當玩家點擊核取方塊時，儲存設定
+        function toggleAutoScrap(catName, rarityName, tier) {
+            if (!game.autoScrap) game.autoScrap = {};
+            const key = `t${tier}-${catName}-${rarityName}`;
+            game.autoScrap[key] = !game.autoScrap[key];
+            renderAutoScrapUI();
+        }
+
+        function toggleAutoScrapTier(tier) {
+            if (!game.autoScrap) game.autoScrap = {};
+            const key = `tier-${tier}`;
+            game.autoScrap[key] = !game.autoScrap[key];
+            renderAutoScrapUI();
+        }
+
+        // 【功能 2】畫出自動分解的過濾表格
+        function renderAutoScrapUI() {
+            const d = document.getElementById("autoScrapSettings");
+            if (!d) return;
+            
+            // Initialize tier settings
+            if (!game.autoScrap) game.autoScrap = {};
+            for (let t = 1; t <= 4; t++) {
+                if (game.autoScrap[`tier-${t}`] === undefined) {
+                    game.autoScrap[`tier-${t}`] = false;
+                }
+            }
+            
+            // 表格的標題與說明
+            let html = `<h3 style="margin-top:0; color:#ff9800;">Auto-Scrap Filter</h3>
+            <p style="font-size:12px; color:#aaa; margin-bottom: 15px;"><strong style="color:#ffa500;">⚠️ Rings with potential (*) are never auto-scrapped.</strong></p>`;
+            
+            const rarities = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythical"];
+            const categories = ["Attack", "Defense", "Ability", "Special"];
+            
+            // Create a panel for each tier
+            for (let tier = 1; tier <= 4; tier++) {
+                const tierKey = `tier-${tier}`;
+                const tierEnabled = game.autoScrap && game.autoScrap[tierKey] ? 'checked' : '';
+                
+                html += `<div style="margin-bottom: 20px; padding: 12px; background: #2a2a35; border-radius: 5px; border-left: 4px solid #2196f3;">
+                    <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 12px;">
+                        <input type="checkbox" ${tierEnabled} onchange="toggleAutoScrapTier(${tier})" style="cursor:pointer; margin-right: 10px; transform: scale(1.2);">
+                        <span style="color: #ffeb3b; font-weight: bold; font-size: 16px;">T${tier} - Auto Scrap</span>
+                    </label>
+                    
+                    <table style="width:100%; text-align:center; border-collapse: collapse; font-size: 13px;">
+                        <tr><th style="text-align:left; border-bottom:1px solid #555; padding-bottom:8px;">Category</th>`;
+                
+                // Table headers (rarities)
+                rarities.forEach(r => { 
+                    html += `<th style="border-bottom:1px solid #555; padding-bottom:8px; font-size:12px;" class="r-${r.toLowerCase()}">${r}</th>`; 
+                });
+                html += `</tr>`;
+
+                // Table rows (categories with checkboxes)
+                categories.forEach(cat => {
+                    html += `<tr><td style="text-align:left; padding: 8px 0; border-bottom:1px solid #444;"><b>${cat}</b></td>`;
+                    
+                    rarities.forEach(r => {
+                        const key = `t${tier}-${cat}-${r}`;
+                        const isChecked = game.autoScrap && game.autoScrap[key] ? 'checked' : '';
+                        html += `<td style="border-bottom:1px solid #444;">
+                                    <input type="checkbox" ${isChecked} onchange="toggleAutoScrap('${cat}', '${r}', ${tier})" style="cursor:pointer; transform: scale(1.2);">
+                                 </td>`;
+                    });
+                    html += `</tr>`;
+                });
+                html += `</table></div>`;
+            }
+            
+            d.innerHTML = html;
+        }
+
+        // ==========================================
+// 💍 全新戒指系統 (Ring System V2)
+// ==========================================
+
+// 1. 安全產生字串 ID 的小工具
+function generateRingId() {
+    return "ring_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
+}
+
+// 2. 獲取戒指加成 (安全計算)
+function getRing(statName) {
+    if (!game.equipped || !game.equipped.rings || !game.rings) return 1;
+    let bonus = 0;
+    
+    game.equipped.rings.forEach(ringId => {
+        if (!ringId) return;
+        let ring = game.rings.find(r => r.id === ringId);
+        if (ring && ring.s === statName) {
+            bonus += (ring.v - 1);
+            if (ring.extra && ring.extra[statName]) {
+                bonus += ring.extra[statName];
+            }
+        }
+    });
+    return 1 + bonus;
+}
+
+// 3. 裝備與卸下戒指 (自動防護幽靈戒指與檢查欄位上限)
+function equipRing(rawId) {
+    let targetId = String(rawId);
+    
+    if (!game.equipped) game.equipped = {};
+    if (!game.equipped.rings) game.equipped.rings = [];
+    
+    // 計算最大欄位 (基礎 3 + 技能樹)
+    let maxSlots = 3 + (game.tree && game.tree.ringSlot ? game.tree.ringSlot : 0);
+    
+    // 清除裝備欄裡的無效資料 (防毒)
+    game.equipped.rings = game.equipped.rings.filter(eqId => {
+        return eqId && game.rings.some(r => r.id === String(eqId));
+    });
+
+    let index = game.equipped.rings.indexOf(targetId);
+    if (index > -1) {
+        // 已經裝備 -> 卸下
+        game.equipped.rings.splice(index, 1);
+    } else {
+        // 尚未裝備 -> 穿上
+        let ring = game.rings.find(r => r.id === targetId);
+        if (ring) {
+            if (ring.apex) {
+                let eqApex = game.equipped.rings.map(id => game.rings.find(r => r.id === id)).filter(Boolean).find(r => r.apex);
+                if (eqApex) { alert("Only one Apex ring can be equipped at a time."); return; }
+            }
+            if (ring.advancedType) {
+                let eqAdvancedSameType = game.equipped.rings.map(id => game.rings.find(r => r.id === id)).filter(Boolean).some(r => r.advancedType === ring.advancedType);
+                if (eqAdvancedSameType) { alert(`Only one advanced ${ring.advancedType} ring can be equipped at a time.`); return; }
+            }
+        }
+
+        if (game.equipped.rings.length >= maxSlots) {
+            game.equipped.rings.shift(); // 滿了就擠掉最舊的
+        }
+        game.equipped.rings.push(targetId);
+    }
+    
+    renderAll(); 
+    saveGame();
+}
+
+// 4. 分解戒指 (確保裝備中的戒指被脫下)
+function scrapRing(rawId) {
+    let targetId = String(rawId);
+    
+    // 1. 在背包中找到這顆戒指的索引 (位置)
+    let index = game.rings.findIndex(r => r.id === targetId);
+    if (index === -1) return; // 如果找不到就結束執行
+    
+    let r = game.rings[index];
+
+    // Check if ring is locked
+    if (r.locked) {
+        logMessage(`Cannot scrap locked ring: ${r.n}`, "damage-text");
+        return;
+    }
+
+    // 2. 計算可以獲得的碎片數量 (使用你找到的完美公式！)
+    // 如果系統找不到 SCRAP_VALUES，預設給 10 當作基數來防錯
+    let baseValue = (typeof SCRAP_VALUES !== 'undefined' && SCRAP_VALUES[r.r]) ? SCRAP_VALUES[r.r] : 10;
+    let scrapAmount = Math.max(1, Math.floor(baseValue * ((r.q || 0) / 100)));
+
+    // 3. 確保玩家的碎片變數存在，然後加上獲得的碎片
+    if (typeof game.ringScrap === 'undefined') game.ringScrap = 0;
+    game.ringScrap += scrapAmount;
+
+    // 4. 如果這顆戒指正好被「裝備中」，必須先把它卸下，以免發生錯誤
+    if (game.equipped && game.equipped.rings && game.equipped.rings.includes(targetId)) {
+        // 將這顆戒指從裝備清單中移除
+        game.equipped.rings = game.equipped.rings.filter(eqId => eqId !== targetId);
+    }
+
+    // 5. 從玩家的戒指清單中把這顆戒指徹底刪除
+    game.rings.splice(index, 1);
+
+    // 6. 重新渲染所有畫面並自動存檔
+    if (typeof renderAll === 'function') {
+        renderAll();
+    } else {
+        renderRings(); // 如果沒有 renderAll，至少更新戒指介面
+    }
+    
+    if (typeof saveGame === 'function') saveGame();
+}
+
+function toggleLockRing(rawId) {
+    let targetId = String(rawId);
+    let r = game.rings.find(x => x.id === targetId);
+    if (!r) return;
+    
+    r.locked = !r.locked;
+    logMessage(`${r.locked ? '🔒 Locked' : '🔓 Unlocked'} ${r.n}`, r.locked ? "damage-text" : "heal-text");
+    renderRings();
+    if (typeof saveGame === 'function') saveGame();
+}
+
+// 5. 精煉戒指 (如果你的遊戲有這個功能的話)
+function refineRing(rawId) {
+    let targetId = String(rawId);
+    let r = game.rings.find(x => x.id === targetId);
+    if (!r) return;
+
+    // 檢查：如果品質已經 100%，就不允許再精煉了
+    if (r.q >= 100) {
+        alert("This ring is already at MAX quality (100%)!");
+        return;
+    }
+
+    let cost = (r.tier || 1) * 10;
+    if (typeof game.ringScrap === 'undefined') game.ringScrap = 0;
+
+    if (game.ringScrap >= cost) {
+        game.ringScrap -= cost; // 扣除碎片
+        
+        // 1. 隨機提升 1% ~ 5% 的品質
+        let qGain = Math.floor(Math.random() * 5) + 1; 
+        
+        // 確保提升後的品質不會超過上限 100%
+        let actualGain = Math.min(qGain, 100 - (r.q || 0)); 
+        r.q = (r.q || 0) + actualGain;
+        
+        // 2. 重新計算數值 (使用原始公式)
+        // value = 1 + (baseStat100 * quality/100) * tierBoost
+        let baseStat = r.baseStat || 1;
+        let tierBoost = r.tierBoost || 1;
+        r.v = 1 + (baseStat * (r.q / 100)) * tierBoost; 
+        
+        // 更新畫面與存檔
+        if (typeof renderAll === 'function') {
+            renderAll();
+        } else {
+            renderRings(); 
+        }
+        if (typeof saveGame === 'function') saveGame();
+        
+    } else {
+        alert("Not enough scraps!");
+    }
+}
+
+function renderRings() {
+    let d = document.getElementById('ringList'); 
+    if (!d) return;
+
+    // --- 1. 更新上方狀態列 (維持不變) ---
+    let eqRingElem = document.getElementById('eqRing');
+    if (eqRingElem) {
+        if (typeof game.ringScrap === 'undefined') game.ringScrap = 0;
+        
+        let displayHtml = ``;
+        if (game.equipped && game.equipped.rings && game.equipped.rings.length > 0) {
+            let equippedNames = game.equipped.rings.map(eqId => {
+                let eqRing = game.rings.find(r => r.id === eqId);
+                if (eqRing) {
+                    return `<span style="color: ${getRarityColor(eqRing.r)}; font-weight: bold;">${eqRing.n || eqRing.r + ' Ring'}</span> (+${Math.round((eqRing.v-1)*100)}%)`;
+                }
+                return null;
+            }).filter(item => item !== null).join(' <span style="color:#888;">|</span> '); 
+            
+            displayHtml += equippedNames || `None`;
+        } else {
+            displayHtml += `None`;
+        }
+        
+        eqRingElem.innerHTML = `${displayHtml} <span style="margin-left: 15px; color:#ff9800; border-left: 1px solid #555; padding-left: 15px;">💎 Scraps: <strong>${game.ringScrap}</strong></span>`;
+    }
+
+    // --- 2. 清空清單 ---
+    d.innerHTML = ''; 
+    if (!game.rings || game.rings.length === 0) {
+        d.innerHTML = '<em style="color:#888;">No rings crafted yet.</em>';
+        return;
+    }
+
+    // --- 3. 將戒指分類打包 ---
+    let categorizedRings = {};
+    game.rings.forEach(r => {
+        let category = getCategoryByStat(r.s) || "Other"; 
+        if (!categorizedRings[category]) {
+            categorizedRings[category] = [];
+        }
+        categorizedRings[category].push(r);
+    });
+
+    const categoryIcons = {
+        "Attack": "⚔️",
+        "Defense": "🛡️",
+        "Ability": "✨",
+        "Special": "🌟",
+        "Other": "💍"
+    };
+
+    // 👇 這裡新增：設定顯示文字的轉換表 👇
+    const statDisplayNames = {
+        "Attack": "Attack",
+        "Defense": "Defense",
+        "Ability": "Click Power",
+        "Special": "Coin Boost",
+        "Other": "Stats"
+    };
+
+    // 👇 這裡新增：強制指定分類的顯示順序 👇
+    const categoryOrder = ["Attack", "Defense", "Ability", "Special", "Other"];
+
+    // --- 4. 依指定順序把每個分類畫到畫面上 ---
+    // (我們把原本的 Object.keys 改成了 categoryOrder)
+    categoryOrder.forEach(cat => {
+        let ringsInCat = categorizedRings[cat];
+        
+        // 確保這個分類裡面真的有戒指才畫出來
+        if (ringsInCat && ringsInCat.length > 0) { 
+            d.innerHTML += `<h3 style="color: #bbb; border-bottom: 1px dashed #444; padding-bottom: 5px; margin-top: 15px; text-align: left;">${categoryIcons[cat] || '💍'} ${cat} Rings</h3>`;
+            
+            ringsInCat.forEach(r => {
+                let isEq = game.equipped && game.equipped.rings && game.equipped.rings.includes(r.id);
+                let refineCost = (r.tier || 1) * 10;
+                let currentQ = r.q || 0; 
+                
+                let baseScrap = (typeof SCRAP_VALUES !== 'undefined' && SCRAP_VALUES[r.r]) ? SCRAP_VALUES[r.r] : 10;
+                let scrapAmount = Math.max(1, Math.floor(baseScrap * (currentQ / 100)));
+                
+                let refineBtn = (currentQ >= 100) 
+                    ? `<button disabled style="background:#555; color:#999; cursor:not-allowed;">Max Quality</button>`
+                    : `<button onclick="refineRing('${r.id}')" style="background:#ff9800; color:#fff;">Refine (${refineCost})</button>`;
+
+                let potentialMark = r.potential ? '*' : '';
+                let advancedLabel = r.advancedType ? ` [${r.advancedType.charAt(0).toUpperCase() + r.advancedType.slice(1)}]` : '';
+                let apexLabel = r.apex ? ' (Apex)' : '';
+                let lockIcon = r.locked ? '🔒' : '';
+
+                let extraStatLines = '';
+                if (r.extra) {
+                    for (let stat in r.extra) {
+                        extraStatLines += `<br><small style="color: #a4c639;">+${typeof r.extra[stat] === 'number' ? r.extra[stat].toFixed(2) : r.extra[stat]} ${stat}</small>`;
+                    }
+                }
+
+                let advanceBtn = '';
+                if (r.potential && r.q >= 100 && !r.advancedType) {
+                    advanceBtn = `<button onclick="upgradeRingToAdvanced('${r.id}')" style="background:#2196f3; color:#fff;">Advance (200 Scrap)</button>`;
+                }
+                let apexBtn = '';
+                if (r.advancedType && !r.apex && r.apexPotential) {
+                    apexBtn = `<button onclick="forgeApexRing('${r.id}')" style="background:#9c27b0; color:#fff;">Forge Apex (2000 Scrap)</button>`;
+                }
+
+                let lockBtn = `<button onclick="toggleLockRing('${r.id}')" style="background:${r.locked ? '#ff5722' : '#4CAF50'}; color:#fff;">${r.locked ? '🔒' : '🔓'}</button>`;
+                let scrapBtn = r.locked 
+                    ? `<button disabled style="background:#555; color:#999; cursor:not-allowed;">Locked</button>`
+                    : `<button onclick="scrapRing('${r.id}')" style="background:#f44336; color:#fff;">Scrap (+${scrapAmount})</button>`;
+
+                d.innerHTML += `
+                <div class="inv-item" style="border-left: 4px solid ${getRarityColor(r.r)}; padding: 10px; margin-bottom: 5px; background: #222; display: flex; justify-content: space-between; align-items: center;"> 
+                    <div style="text-align: left;">
+                        <strong style="color: ${getRarityColor(r.r)};">${lockIcon} ${r.n || r.r + ' Ring'}${potentialMark}${advancedLabel}${apexLabel}</strong><br>
+                        <small style="color: #ccc;">Tier ${r.tier || 1} | Quality: ${currentQ}% | +${Math.round((r.v-1)*100)}% ${statDisplayNames[cat] || cat}</small>
+                        ${extraStatLines}
+                    </div>
+                    <div>
+                        <button onclick="equipRing('${r.id}')">${isEq ? 'Unequip' : 'Equip'}</button> 
+                        ${lockBtn}
+                        ${refineBtn}
+                        ${advanceBtn}
+                        ${apexBtn}
+                        ${scrapBtn}
+                    </div>
+                </div>`;
+            });
+        }
+    });
+}
+
+// 如果你之前沒有加上這個判斷顏色的輔助函數，請把它放在 renderRings 下面：
+function getRarityColor(rarity) {
+    if(!rarity) return '#fff';
+    if(rarity === 'Common') return '#b0bec5';
+    if(rarity === 'Uncommon') return '#69f0ae';
+    if(rarity === 'Rare') return '#40c4ff';
+    if(rarity === 'Epic') return '#b388ff';
+    if(rarity === 'Legendary') return '#ffd740';
+    if(rarity === 'Mythical') return '#ff5252';
+    return '#fff';
+}
+
+// 輔助函數：用來決定不同稀有度戒指的顏色（這可以讓你的介面更漂亮！）
+function getRarityColor(rarity) {
+    if(rarity === 'Common') return '#b0bec5';
+    if(rarity === 'Uncommon') return '#69f0ae';
+    if(rarity === 'Rare') return '#40c4ff';
+    if(rarity === 'Epic') return '#b388ff';
+    if(rarity === 'Legendary') return '#ffd740';
+    if(rarity === 'Mythical') return '#ff5252';
+    return '#fff';
+}
+
+        // 【新增】輔助函數：將屬性變數轉回分類名稱
+        function getCategoryByStat(statType) {
+            if(statType === 'atkMulti') return 'Attack';
+            if(statType === 'hpMulti') return 'Defense';
+            if(statType === 'clickMulti') return 'Ability';
+            if(statType === 'coinMulti') return 'Special';
+            return 'Attack';
+        }
+
+        // 【新增】切換自動分解設定並儲存
+        function buyCard() {
+            if (game.gems >= 10) {
+                game.gems -= 10; 
+                
+                // 【修復】計算所有卡牌的總權重，而不是固定寫死 100
+                let reinc = game.reincarnations || 0;
+                let totalWeight = 0;
+                for (let c of CARD_DEFS) {
+                    let w = c.weight;
+                    if (reinc >= 2 && c.r !== "common") w *= 1.5; // 2nd Milestone: Rare cards 1.5x luck
+                    totalWeight += w;
+                }
+                
+                let roll = Math.random() * totalWeight, cardDef = CARD_DEFS[0];
+                for (let c of CARD_DEFS) { 
+                    let w = c.weight;
+                    if (reinc >= 2 && c.r !== "common") w *= 1.5;
+                    if (roll < w) { cardDef = c; break; } 
+                    roll -= w; 
+                }
+                
+                let existingCard = game.cards.find(x => x.id === cardDef.id);
+                
+                if (existingCard) {
+                    if (!existingCard.level) { existingCard.level = 1; existingCard.exp = 0; }
+                    
+                    existingCard.exp++;
+                    let reqExp = existingCard.level; 
+                    
+                    if (existingCard.exp >= reqExp) {
+                        existingCard.exp -= reqExp;
+                        existingCard.level++;
+                        logMessage(`Card Leveled Up: ${existingCard.name} (Lv.${existingCard.level})!`, "heal-text");
+                        game.playerHp = calcStats().hp; 
+                    } else {
+                        logMessage(`Got duplicate ${existingCard.name} (+1 EXP)`, "card-text");
+                    }
+                } else {
+                    game.cards.push({ ...cardDef, instId: Date.now(), eq: false, level: 1, exp: 0 }); 
+                    logMessage(`Drew Card: ${cardDef.name}!`, "card-text"); 
+                }
+                renderCards(); updateUI();
+            }
+        }
+
+        function buyCardSlot() { const c = SLOT_COSTS[game.cardSlots - 1] || 999999; if (game.gems >= c && game.cardSlots < 10) { game.gems -= c; game.cardSlots++; renderCards(); updateUI(); } }
+        function equipCard(instId) {
+            const c = game.cards.find(x => x.instId === instId); const eqC = game.cards.filter(x => x.eq).length;
+            if (c.eq) c.eq = false; else if (eqC < game.cardSlots) c.eq = true;
+            game.playerHp = calcStats().hp; renderCards(); updateUI();
+        }
+        function renderCards() {
+            const d = document.getElementById("cardList"); d.innerHTML = ""; const eqC = game.cards.filter(x => x.eq).length;
+            document.getElementById("cardGemDisplay").innerText = format(game.gems); document.getElementById("slotsUsed").innerText = eqC; document.getElementById("slotsMax").innerText = game.cardSlots;
+            const sC = SLOT_COSTS[game.cardSlots - 1] || "MAX"; document.getElementById("slotCostDisplay").innerText = sC; document.getElementById("btnBuySlot").disabled = (game.cardSlots >= 10 || game.gems < sC);
+            if (game.cards.length === 0) d.innerHTML = "<em>No cards yet.</em>";
+            
+            game.cards.forEach(c => {
+                let lvl = c.level || 1;
+                let exp = c.exp || 0;
+                let reqExp = lvl;
+                let multi = Math.pow(2, lvl - 1);
+                
+                d.innerHTML += `<div class="inv-item">
+                <div class="r-${c.r}" style="text-align:left;">
+                    <strong>${c.name} (Lv.${lvl})</strong><br>
+                    <small>${c.desc} <strong style="color:#00e5ff;">(Current Effect: ${multi > 1 ? 'x' + multi : 'Base'})</strong></small><br>
+                    <small style="color:#aaa;">EXP: ${exp} / ${reqExp}</small>
+                </div>
+                <button onclick="equipCard(${c.instId})" style="background:${c.eq ? '#f44336' : '#4CAF50'}" ${!c.eq && eqC >= game.cardSlots ? 'disabled' : ''}>${c.eq ? 'Unequip' : 'Equip'}</button></div>`;
+            });
+        }
+
+        function renderRelics() {
+            const d = document.getElementById("relicList"); d.innerHTML = "";
+            Object.values(game.relics).forEach(r => d.innerHTML += `<div class="inv-item" style="display:block;"><strong>${r.n} x${r.count}</strong><br><small>${r.d} (Total: ${(r.v*r.count).toFixed(2)})</small></div>`);
+        }
+
+        function reincarnate() {
+            if (game.reincarnations === undefined) game.reincarnations = 0;
+            if (game.p === undefined) game.p = 0;
+            if (game.scraps === undefined) game.scraps = 0;
+
+            let reqStage = 100 + (game.reincarnations * 100);
+            
+            if (game.stage <= reqStage) {
+                alert(`You need to beat Stage ${reqStage} to Reincarnate!`);
+                return;
+            }
+            
+            if (confirm(`Are you sure you want to Reincarnate?\n\n- Gain +1 P Point\n- Rings will be scrapped (1.25x value)\n- Upgrades & Stage reset\n- Cards kept but disabled until unlocked again.`)) {
+                
+                game.p += 1;
+                game.reincarnations += 1;
+                
+                let totalScrapValue = 0;
+                if (game.rings) {
+                    game.rings.forEach(r => {
+                        let baseVal = r.tier === 1 ? 1000 : (r.tier === 2 ? 1000000 : (r.tier === 3 ? 1000000000 : 1000000000000));
+                        totalScrapValue += baseVal;
+                    });
+                }
+                game.scraps += Math.floor(totalScrapValue * 1.25);
+                game.rings = []; 
+                game.equipped.rings = []; 
+                
+                game.stage = 1;
+                game.maxStage = 1;
+                game.histMaxStage = 1; 
+                game.coins = 0;
+                game.tokens = 0;
+                game.tree = { ...defaultState.tree }; 
+                game.killStreak = 0; // Reset kill streak on reincarnation 
+                
+                saveGame();
+                location.reload();
+            }
+        }
+
+        // 購買 P 點轉生升級
+        function buyRUpg(id) {
+            if (!game.rUpgrades) game.rUpgrades = { goldRush: 0, brutalHit: 0, absTank: 0 };
+            if (game.p >= 1) {
+                game.p -= 1;
+                game.rUpgrades[id]++;
+                logMessage(`Upgraded ${id} to Lv.${game.rUpgrades[id]}!`, "heal-text");
+                saveGame(); updateUI();
+            } else {
+                alert("Not enough P points!");
+            }
+        }
+
+
+        function doPrestige() {
+            let reinc = game.reincarnations || 0;
+            let rUpg = game.rUpgrades || { goldRush: 0, brutalHit: 0, absTank: 0 };
+            
+            let extraTokens = 0;
+            if (reinc >= 1) extraTokens += 1; // 1st Milestone
+            if (rUpg.goldRush > 0) {
+                for (let i = 0; i < rUpg.goldRush; i++) {
+                    if (Math.random() < 0.3) extraTokens += 1; // 30% chance per level
+                }
+            }
+            // 然後把你原本獲得的 token 加上 extraTokens
+            // game.tokens += (原本的數量) + extraTokens;
+            if (game.stage < 20) return; const tG = Math.floor(Math.pow(game.stage/10, 1.5));
+            if (confirm(`Prestige for ${tG + extraTokens} Tokens? Gear and Stages will be reset!`)) {
+                // Add highest stage from this run to wheel progress cumulative before resetting
+                const stageContribution = Math.max(game.stage, game.histMaxStage || 0);
+                game.wheelProgressCumulative = (game.wheelProgressCumulative || 0) + stageContribution;
+                
+                game.tokens += tG;
+                game.power = 1; game.clickCount = 0; game.coins = 0; game.stage = 1; game.maxStage = 1; game.histMaxStage = 1; game.highestGemBoss = 0;
+                game.inventory = {}; game.equipped.weapon = null; game.equipped.armor = null;
+                game.killStreak = 0; // Reset kill streak on prestige
+                saveGame(); renderAll(); spawnEnemy();
+            }
+        }
+        // --- 轉生技能樹花費計算 (已更新為前3項每2級才增加花費) ---
+        function getPCost(k) { 
+            const config = P_CONFIG[k];
+            const level = game.tree[k];
+            
+            // 如果是前三個基礎屬性 (atk, hp, pwr)，每 2 級才增加一次花費
+            if (k === 'atk' || k === 'hp' || k === 'pwr') {
+                return config.bCost + (Math.floor(level / 2) * config.sStep);
+            } 
+            // 其他進階屬性維持每級增加花費
+            else {
+                return config.bCost + (level * config.sStep);
+            }
+        }
+        function buyPrestige(k, useVoucher = false) {
+            // 【修復】如果技能是 undefined 或 NaN (壞掉的數值)，強制把它重置為 0
+            if (!game.tree[k]) game.tree[k] = 0;
+            
+            // Check if already maxed
+            if (game.tree[k] >= P_CONFIG[k].m) {
+                logMessage("Already maxed!");
+                return;
+            }
+            
+            // Check if using voucher
+            if (useVoucher) {
+                if (!game.wheelVouchers || game.wheelVouchers.pres < 1) {
+                    logMessage(`No Prestige Vouchers available!`);
+                    return;
+                }
+                game.wheelVouchers.pres--;
+                game.tree[k]++;
+                logMessage(`✨ Used Prestige Voucher for ${P_CONFIG[k].n}!`, "boss-loot-text");
+                saveGame();
+                renderAll();
+                return;
+            }
+            
+            // Normal token cost path
+            const c = getPCost(k); 
+            if (game.tokens >= c && game.tree[k] < P_CONFIG[k].m) { 
+                game.tokens -= c; 
+                game.tree[k]++; 
+                saveGame(); 
+                renderAll(); 
+            }
+        }
+  
+        function renderPrestige() {
+            const d = document.getElementById("prestigeList"); 
+            d.innerHTML = ""; 
+            document.getElementById("tokenDisplay").innerText = format(game.tokens);
+            
+            Object.keys(P_CONFIG).forEach(k => {
+                const c = P_CONFIG[k]; 
+                // 【修復】加上 || 0，預防舊存檔找不到技能
+                const lvl = game.tree[k] || 0; 
+                const lk = (game.maxStageEver || 1) < c.unl; 
+                const cost = getPCost(k);
+                const canAfford = game.tokens >= cost;
+                const hasVouch = game.wheelVouchers && game.wheelVouchers.pres > 0 && !lk && lvl < c.m;
+                
+                let btnHtml = `<button onclick="buyPrestige('${k}')" ${lk||lvl>=c.m||!canAfford?'disabled':''}>${lvl>=c.m?'MAX':`Buy (${cost})`}</button>`;
+                if (hasVouch) {
+                    btnHtml += ` <button onclick="buyPrestige('${k}', true)" style="background: #ff6b9d;">${lvl>=c.m?'MAX':'Free'}</button>`;
+                }
+                
+                d.innerHTML += `<div class="tree-item ${lk?'locked-item':''}"><div><h3>${c.n} (Lv.${lvl}/${c.m===999?'∞':c.m})</h3><p>${c.d} ${lk?`[Unlocks Stage ${c.unl}]`:''}</p></div>
+                ${btnHtml}</div>`;
+            });
+        }
+
+        function renderAll() { renderInventory(); renderRings(); renderCards(); renderRelics(); renderPrestige(); updateUI(); }
+        window.onload = function() { loadGame(); renderAll(); spawnEnemy(); // 每秒被動回血與敵人 DoT
+            setInterval(() => {
+                const stats = calcStats();
+                if (stats.regen > 0 && game.playerHp < stats.hp) {
+                    const heal = Math.floor(stats.hp * (stats.regen / 100));
+                    game.playerHp = Math.min(stats.hp, game.playerHp + heal);
+                    updateUI();
+                }
+
+                // 敵人 DoT 判定 (Piercing)
+                if (window.enemy && enemy.dotTicks > 0) {
+                    enemy.hp -= enemy.dotDmg;
+                    enemy.dotTicks--;
+                    logMessage(`🩸 Enemy took ${format(enemy.dotDmg)} Pierce DoT!`, "attack-text");
+                    if (enemy.hp <= 0) defeatEnemy(calcStats());
+                    updateUI();
+                }
+
+                // 敵人 Poison DoT 判定
+                if (window.enemy && enemy.poisonRounds > 0) {
+                    enemy.hp -= enemy.poisonDmg;
+                    enemy.poisonRounds--;
+                    logMessage(`🧪 Enemy took ${format(enemy.poisonDmg)} Poison DoT!`, "poison-text");
+                    if (enemy.hp <= 0) defeatEnemy(calcStats());
+                    updateUI();
+                }
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
